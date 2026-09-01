@@ -9,7 +9,7 @@ import axios from "axios";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "./App.css";
 
-mapboxgl.accessToken = process.env.REACT_APP_MAPBOX_TOKEN;
+mapboxgl.accessToken = "pk.eyJ1IjoiY2hyaXN0b3BoZXJwaGFtIiwiYSI6ImNtcXZlbTRqZzEyeXEydXExZzl0aWJiaHMifQ.o58ZrcJwSDHNwV98157itA";
 
 const API = "https://structural-resilience-production.up.railway.app";
 
