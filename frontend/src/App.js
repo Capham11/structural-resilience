@@ -930,8 +930,8 @@ export default function App() {
         )}
 
         {/* Map */}
-        <main className="map-main">
-          <div ref={mapContainer} className="map" />
+        <main className="map-main" style={{ flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+          <div ref={mapContainer} className="map" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
           <MapLegend mapMode={mapMode} />
           <MapPills mapMode={mapMode} setMapMode={setMapMode} result={result}
             playing={playing} setPlaying={setPlaying} playDay={playDay}
