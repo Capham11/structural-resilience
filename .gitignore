@@ -17,3 +17,4 @@ outbreak_model/outputs/*.csv
 
 # Mac
 .DS_Store
+frontend/.env
