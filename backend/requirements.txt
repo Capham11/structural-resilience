@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+geopandas
+pandas
+numpy
+scipy
+libpysal
+pydantic
+python-multipart
