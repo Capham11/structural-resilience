@@ -663,12 +663,16 @@ export default function App() {
   useEffect(() => {
     if (map.current) return;
     map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: "mapbox://styles/mapbox/dark-v11",
-      center: [-120.5, 47.4], zoom: 6.2,
-    });
-    map.current.on("load", () => setMapReady(true));
-    map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+  container: mapContainer.current,
+  style: "mapbox://styles/mapbox/dark-v11",
+  center: [-120.5, 47.4], zoom: 6.2,
+});
+map.current.on("load", () => {
+  setMapReady(true);
+  setTimeout(() => map.current.resize(), 200);
+});
+map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+setTimeout(() => map.current?.resize(), 1000);
   }, []);
 
   // Load tracts
