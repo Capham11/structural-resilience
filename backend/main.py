@@ -21,8 +21,8 @@ from libpysal.weights import Queen
 # PATHS
 # ==================================================
 
-BASE_DIR  = Path(__file__).parent.parent / "outbreak_model"
-DATA_PATH = BASE_DIR / "outputs" / "washington_vulnerability_enriched.geojson"
+BASE_DIR  = Path(__file__).parent
+DATA_PATH = BASE_DIR / "washington_vulnerability_enriched.geojson"
 
 # ==================================================
 # APP INIT
