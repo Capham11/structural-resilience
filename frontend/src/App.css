@@ -254,8 +254,8 @@ body { background: var(--bg); color: var(--t1); font-family: var(--f); font-size
 .radar-title { font-size: 8.5px; font-weight: 800; letter-spacing: 0.14em; color: var(--tm); font-family: var(--fm); margin-bottom: 4px; text-transform: uppercase; }
 
 /* Map */
-.map-main { flex: 1; position: relative; overflow: hidden; }
-.map { width: 100%; height: 100%; }
+.map-main { flex: 1; position: relative; overflow: hidden; min-width: 0; flex-grow: 1; }
+.map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 
 /* Map Legend */
 .map-legend {
