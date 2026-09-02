@@ -659,21 +659,23 @@ export default function App() {
   const [resilienceScores, setResilienceScores] = useState(null);
   const [phase5Tab,        setPhase5Tab]        = useState("roi");
 
-  // Init map
-  useEffect(() => {
-    if (map.current) return;
+// Init map
+useEffect(() => {
+  if (map.current) return;
+  setTimeout(() => {
     map.current = new mapboxgl.Map({
-  container: mapContainer.current,
-  style: "mapbox://styles/mapbox/dark-v11",
-  center: [-120.5, 47.4], zoom: 6.2,
-});
-map.current.on("load", () => {
-  setMapReady(true);
-  setTimeout(() => map.current.resize(), 200);
-});
-map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
-setTimeout(() => map.current?.resize(), 1000);
-  }, []);
+      container: mapContainer.current,
+      style: "mapbox://styles/mapbox/dark-v11",
+      center: [-120.5, 47.4], zoom: 6.2,
+    });
+    map.current.on("load", () => {
+      setMapReady(true);
+      setTimeout(() => map.current.resize(), 200);
+    });
+    map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+    setTimeout(() => map.current?.resize(), 500);
+  }, 300);
+}, []);
 
   // Load tracts
   useEffect(() => {
