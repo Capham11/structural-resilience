@@ -663,35 +663,19 @@ export default function App() {
 useEffect(() => {
   if (map.current) return;
   setTimeout(() => {
-    if (mapContainer.current) {
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: "mapbox://styles/mapbox/dark-v11",
-        center: [-120.5, 47.4],
-        zoom: 6.2,
-      });
-      map.current.on("load", () => {
-        setMapReady(true);
-        map.current.resize();
-      });
-      map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
-    }
+    if (!mapContainer.current) return;
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: "mapbox://styles/mapbox/dark-v11",
+      center: [-120.5, 47.4],
+      zoom: 6.2,
+    });
+    map.current.on("load", () => {
+      setMapReady(true);
+      map.current.resize();
+    });
+    map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
   }, 500);
-}, []);
-
-  // Wait until container has non-zero width
-  const observer = new ResizeObserver(entries => {
-    for (const entry of entries) {
-      if (entry.contentRect.width > 0) {
-        observer.disconnect();
-        initMap();
-        break;
-      }
-    }
-  });
-  observer.observe(container);
-
-  return () => observer.disconnect();
 }, []);
 
   // Load tracts
