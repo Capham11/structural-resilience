@@ -40,22 +40,20 @@ const COUNTY_NAMES = {
 };
 
 const LEGEND_CONFIG = {
-  vuln:        { label: "Vulnerability",         low: "Low",  high: "High",  colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
-  peak_I:      { label: "Peak Infectious Rate",  low: "0%",   high: "20%+",  colors: ["#0d1b2a","#1e3a5f","#1d6fa8","#f97316","#dc2626"] },
-  attack:      { label: "Attack Rate",           low: "0%",   high: "100%",  colors: ["#0d1b2a","#1e3a5f","#1d6fa8","#f97316","#dc2626"] },
-  delta:       { label: "Intervention Benefit",  low: "None", high: "High",  colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
-  healthcare:  { label: "Hospital Distance",     low: "Near", high: "Far",   colors: ["#0d2a1a","#166534","#f97316","#dc2626"] },
-  playback:    { label: "Active Infections",     low: "0%",   high: "High",  colors: ["#0d1b2a","#1e3a5f","#1d6fa8","#f97316","#dc2626"] },
-  equity:      { label: "Equity Burden",         low: "Low",  high: "High",  colors: ["#0d1b2a","#1e3a5f","#7c3aed","#dc2626"] },
-  resilience:  { label: "Structural Resilience", low: "Resilient", high: "Fragile", colors: ["#0d2a1a","#166534","#f97316","#dc2626"] },
+  vuln:       { label: "Vulnerability",        low: "Low",      high: "High",    colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
+  peak_I:     { label: "Peak Infectious Rate", low: "0%",       high: "20%+",    colors: ["#0d1b2a","#1e3a5f","#1d6fa8","#f97316","#dc2626"] },
+  attack:     { label: "Attack Rate",          low: "0%",       high: "100%",    colors: ["#0d1b2a","#1e3a5f","#1d6fa8","#f97316","#dc2626"] },
+  delta:      { label: "Intervention Benefit", low: "None",     high: "High",    colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
+  healthcare: { label: "Hospital Distance",    low: "Near",     high: "Far",     colors: ["#0d2a1a","#166534","#f97316","#dc2626"] },
+  playback:   { label: "Active Infections",    low: "0%",       high: "High",    colors: ["#0d1b2a","#1e3a5f","#1d6fa8","#f97316","#dc2626"] },
+  equity:     { label: "Equity Burden",        low: "Low",      high: "High",    colors: ["#0d1b2a","#1e3a5f","#7c3aed","#dc2626"] },
+  resilience: { label: "Structural Resilience",low: "Resilient",high: "Fragile", colors: ["#0d2a1a","#166534","#f97316","#dc2626"] },
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt  = n => n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
 const pct  = n => n != null ? `${(n*100).toFixed(1)}%` : "—";
 const dark = { background: "#111827", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 };
 
-// ── Slider helper ─────────────────────────────────────────────────────────────
 function Slider({ label, note, min, max, step, value, onChange, unit="" }) {
   return (
     <div className="d-slider">
@@ -69,7 +67,6 @@ function Slider({ label, note, min, max, step, value, onChange, unit="" }) {
   );
 }
 
-// ── Map Legend ────────────────────────────────────────────────────────────────
 function MapLegend({ mapMode }) {
   const cfg = LEGEND_CONFIG[mapMode] || LEGEND_CONFIG.vuln;
   return (
@@ -81,7 +78,6 @@ function MapLegend({ mapMode }) {
   );
 }
 
-// ── Map Pills ─────────────────────────────────────────────────────────────────
 function MapPills({ mapMode, setMapMode, result, playing, setPlaying, playDay, setPlayDay, days }) {
   const modes = [
     ["vuln","Vulnerability"],["peak_I","Peak I"],["attack","Attack Rate"],
@@ -91,7 +87,7 @@ function MapPills({ mapMode, setMapMode, result, playing, setPlaying, playDay, s
   return (
     <div className="map-pills-wrap">
       <div className="map-pills">
-        {modes.map(([m, l]) => (
+        {modes.map(([m,l]) => (
           <button key={m} className={`map-pill ${mapMode===m?"active":""}`}
             onClick={() => setMapMode(m)}>{l}</button>
         ))}
@@ -110,12 +106,11 @@ function MapPills({ mapMode, setMapMode, result, playing, setPlaying, playDay, s
   );
 }
 
-// ── Tract Card ────────────────────────────────────────────────────────────────
 function TractCard({ tract, result, resilienceScores, onClose }) {
   if (!tract) return null;
-  const metrics  = result?.tract_metrics?.[tract.GEOID];
-  const res      = resilienceScores?.[tract.GEOID];
-  const isSurge  = Number(tract.HubDist||0)>30000 && metrics?.peak_I/(Number(tract.population)||1)>0.1;
+  const metrics = result?.tract_metrics?.[tract.GEOID];
+  const res     = resilienceScores?.[tract.GEOID];
+  const isSurge = Number(tract.HubDist||0)>30000 && metrics?.peak_I/(Number(tract.population)||1)>0.1;
   return (
     <div className="tract-card">
       <div className="tc-head">
@@ -133,14 +128,13 @@ function TractCard({ tract, result, resilienceScores, onClose }) {
           <div className="tc-row"><span>Attack rate</span><span>{pct(metrics.attack_rate)}</span></div>
           <div className="tc-row"><span>Peak day</span><span>{metrics.peak_day}</span></div>
         </>}
-        {res && <div className="tc-row"><span>Resilience score</span><span className={`tc-res ${res.tier}`}>{res.score.toFixed(3)} — {res.tier}</span></div>}
+        {res && <div className="tc-row"><span>Resilience</span><span className={`tc-res ${res.tier}`}>{res.score.toFixed(3)} — {res.tier}</span></div>}
       </div>
       {isSurge && <div className="tc-surge">⚠ Surge Risk — {(Number(tract.HubDist)/1000).toFixed(0)} km from hospital</div>}
     </div>
   );
 }
 
-// ── Vulnerability Radar ───────────────────────────────────────────────────────
 function VulnRadar({ tract, stateAvg }) {
   if (!tract) return null;
   const dims = [
@@ -173,84 +167,59 @@ function VulnRadar({ tract, stateAvg }) {
   );
 }
 
-// ── ROI Calculator ────────────────────────────────────────────────────────────
 function ROICalculator({ result, compareResult }) {
   if (!result || !compareResult) return (
     <div className="roi-empty">Run a scenario comparison to see the Intervention ROI Calculator.</div>
   );
-
   const a = compareResult.scenario_a.meta;
   const b = compareResult.scenario_b.meta;
-  const saved     = Math.round(a.total_R - b.total_R);
-  const peakCut   = Math.round(a.peak_I  - b.peak_I);
-  const peakDelay = b.peak_day - a.peak_day;
-  const reduction = compareResult.intervention?.intervention_reduction ||
-                    (1 - b.attack_rate / a.attack_rate);
-
-  // Policy equivalents
-  const vaccineEq   = Math.round(saved / 0.70);
-  const maskEq      = Math.round(reduction * 100 * 0.8);
-  const iculBeds    = Math.round(peakCut * 0.05);
-
-  const roiRows = [
-    { label: "Total infections prevented", value: fmt(saved), color: "#22c55e" },
-    { label: "Peak infectious reduced by",  value: fmt(peakCut), color: "#22c55e" },
-    { label: "Peak delayed by",             value: `${peakDelay} days`, color: "#3b82f6" },
-    { label: "Attack rate reduction",       value: `${(a.attack_rate - b.attack_rate).toFixed(1)}%`, color: "#3b82f6" },
-  ];
-
-  const equivRows = [
-    { label: "Equivalent to vaccinating", value: `${fmt(vaccineEq)} people at 70% efficacy`, icon: "💉" },
-    { label: "Or achieving mask compliance of", value: `~${maskEq}% of population`, icon: "😷" },
-    { label: "ICU bed-days freed", value: `~${fmt(iculBeds)} bed-days`, icon: "🏥" },
-  ];
+  const saved   = Math.round(a.total_R - b.total_R);
+  const peakCut = Math.round(a.peak_I  - b.peak_I);
+  const reduction = 1 - b.attack_rate / a.attack_rate;
+  const vaccineEq = Math.round(saved / 0.70);
+  const maskEq    = Math.round(reduction * 100 * 0.8);
+  const icuBeds   = Math.round(peakCut * 0.05);
 
   return (
     <div className="roi-wrap">
       <div className="roi-section-label">Outcome Metrics</div>
       <div className="roi-grid">
-        {roiRows.map(r => (
-          <div key={r.label} className="roi-card">
-            <span>{r.label}</span>
-            <strong style={{ color: r.color }}>{r.value}</strong>
-          </div>
+        {[
+          ["Total infections prevented", fmt(saved),        "#22c55e"],
+          ["Peak infectious reduced by",  fmt(peakCut),      "#22c55e"],
+          ["Peak delayed by",             `${b.peak_day - a.peak_day} days`, "#3b82f6"],
+          ["Attack rate reduction",       `${(a.attack_rate - b.attack_rate).toFixed(1)}%`, "#3b82f6"],
+        ].map(([l,v,c]) => (
+          <div key={l} className="roi-card"><span>{l}</span><strong style={{color:c}}>{v}</strong></div>
         ))}
       </div>
-
-      <div className="roi-section-label" style={{ marginTop: 16 }}>Policy Equivalents</div>
+      <div className="roi-section-label" style={{marginTop:14}}>Policy Equivalents</div>
       <div className="roi-equiv">
-        {equivRows.map(r => (
-          <div key={r.label} className="roi-equiv-row">
-            <span className="roi-icon">{r.icon}</span>
-            <div>
-              <div className="roi-equiv-label">{r.label}</div>
-              <div className="roi-equiv-value">{r.value}</div>
-            </div>
+        {[
+          ["💉","Equivalent to vaccinating",`${fmt(vaccineEq)} people at 70% efficacy`],
+          ["😷","Or achieving mask compliance of",`~${maskEq}% of population`],
+          ["🏥","ICU bed-days freed",`~${fmt(icuBeds)} bed-days`],
+        ].map(([icon,l,v]) => (
+          <div key={l} className="roi-equiv-row">
+            <span className="roi-icon">{icon}</span>
+            <div><div className="roi-equiv-label">{l}</div><div className="roi-equiv-value">{v}</div></div>
           </div>
         ))}
       </div>
-
-      <div className="roi-caveat">
-        Policy equivalents are illustrative estimates. Vaccine equivalence assumes 70% efficacy and no waning.
-        ICU estimate uses 5% hospitalization rate of prevented cases.
-      </div>
+      <div className="roi-caveat">Policy equivalents are illustrative estimates. Vaccine equivalence assumes 70% efficacy and no waning.</div>
     </div>
   );
 }
 
-// ── Counterfactual Timeline ───────────────────────────────────────────────────
 function CounterfactualTimeline({ params, cfResult, setCfResult, setCfLoading, cfLoading }) {
-  const [cfDay, setCfDay]         = useState(60);
-  const [cfReduce, setCfReduce]   = useState(40);
+  const [cfDay, setCfDay]       = useState(60);
+  const [cfReduce, setCfReduce] = useState(40);
 
   const run = async () => {
     setCfLoading(true);
     try {
       const res = await axios.post(`${API}/simulate/counterfactual`, {
-        ...params,
-        intervention_day: cfDay,
-        intervention_reduction: cfReduce / 100,
-        intervention_day_null: null,
+        ...params, intervention_day: cfDay, intervention_reduction: cfReduce / 100,
       });
       setCfResult(res.data);
     } catch(e) { console.error(e); }
@@ -270,50 +239,38 @@ function CounterfactualTimeline({ params, cfResult, setCfResult, setCfLoading, c
     <div className="cf-wrap">
       <div className="cf-controls">
         <div className="cf-sliders">
-          <Slider label="Intervene day" min={1} max={params.days-10} step={1}
-            value={cfDay} onChange={setCfDay} />
-          <Slider label="β reduction" min={5} max={95} step={5}
-            value={cfReduce} onChange={setCfReduce} unit="%" />
+          <Slider label="Intervene day" min={1} max={params.days-10} step={1} value={cfDay} onChange={setCfDay} />
+          <Slider label="β reduction" min={5} max={95} step={5} value={cfReduce} onChange={setCfReduce} unit="%" />
         </div>
         <button className="cf-run-btn" onClick={run} disabled={cfLoading}>
           {cfLoading ? "Computing…" : "↺  Compute"}
         </button>
       </div>
-
       {cfResult && (
         <>
           <div className="cf-kpis">
-            <div className="cf-kpi">
-              <span>Lives protected</span>
-              <strong style={{color:"#22c55e"}}>{fmt(cfResult.summary.total_lives_saved)}</strong>
-            </div>
-            <div className="cf-kpi">
-              <span>Peak reduced</span>
-              <strong style={{color:"#3b82f6"}}>{fmt(cfResult.summary.peak_reduction)}</strong>
-            </div>
-            <div className="cf-kpi">
-              <span>Peak delayed</span>
-              <strong style={{color:"#a855f7"}}>{cfResult.summary.peak_delay_days}d</strong>
-            </div>
-            <div className="cf-kpi">
-              <span>Attack rate</span>
-              <strong style={{color:"#ef4444"}}>{cfResult.summary.attack_rate_base}% → {cfResult.summary.attack_rate_intv}%</strong>
-            </div>
+            {[
+              ["Lives protected", fmt(cfResult.summary.total_lives_saved), "#22c55e"],
+              ["Peak reduced",    fmt(cfResult.summary.peak_reduction),    "#3b82f6"],
+              ["Peak delayed",    `${cfResult.summary.peak_delay_days}d`,  "#a855f7"],
+              ["Attack rate",     `${cfResult.summary.attack_rate_base}% → ${cfResult.summary.attack_rate_intv}%`, "#ef4444"],
+            ].map(([l,v,c]) => (
+              <div key={l} className="cf-kpi"><span>{l}</span><strong style={{color:c}}>{v}</strong></div>
+            ))}
           </div>
-
           <div className="cf-chart-label">Infectious Curves + Cumulative Lives Saved</div>
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData} margin={{ top:4,right:20,left:0,bottom:0 }}>
+            <LineChart data={chartData} margin={{top:4,right:20,left:0,bottom:0}}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="day" stroke="#334155" tick={{ fontSize:10,fill:"#64748b" }} />
-              <YAxis yAxisId="left"  stroke="#334155" tick={{ fontSize:10,fill:"#64748b" }}
-                tickFormatter={v => v>=1e6?`${(v/1e6).toFixed(1)}M`:v>=1e3?`${(v/1e3).toFixed(0)}k`:v} />
-              <YAxis yAxisId="right" orientation="right" stroke="#334155" tick={{ fontSize:10,fill:"#64748b" }}
-                tickFormatter={v => v>=1e6?`${(v/1e6).toFixed(1)}M`:v>=1e3?`${(v/1e3).toFixed(0)}k`:v} />
+              <XAxis dataKey="day" stroke="#334155" tick={{fontSize:10,fill:"#64748b"}} />
+              <YAxis yAxisId="left"  stroke="#334155" tick={{fontSize:10,fill:"#64748b"}}
+                tickFormatter={v=>v>=1e6?`${(v/1e6).toFixed(1)}M`:v>=1e3?`${(v/1e3).toFixed(0)}k`:v} />
+              <YAxis yAxisId="right" orientation="right" stroke="#334155" tick={{fontSize:10,fill:"#64748b"}}
+                tickFormatter={v=>v>=1e6?`${(v/1e6).toFixed(1)}M`:v>=1e3?`${(v/1e3).toFixed(0)}k`:v} />
               <Tooltip formatter={(v,n)=>[fmt(v),n]} contentStyle={dark} />
-              <Legend wrapperStyle={{ fontSize:11 }} />
+              <Legend wrapperStyle={{fontSize:11}} />
               <ReferenceLine yAxisId="left" x={cfDay} stroke="#f97316" strokeDasharray="4 2"
-                label={{ value:`Day ${cfDay}`, fill:"#f97316", fontSize:10 }} />
+                label={{value:`Day ${cfDay}`,fill:"#f97316",fontSize:10}} />
               <Line yAxisId="left"  type="monotone" dataKey="Baseline"     stroke="#ef4444" strokeWidth={2} dot={false} />
               <Line yAxisId="left"  type="monotone" dataKey="Intervention" stroke="#3b82f6" strokeWidth={2} dot={false} strokeDasharray="5 3" />
               <Line yAxisId="right" type="monotone" dataKey="Saved"        stroke="#22c55e" strokeWidth={1.5} dot={false} />
@@ -322,7 +279,6 @@ function CounterfactualTimeline({ params, cfResult, setCfResult, setCfLoading, c
           <div className="cf-note">Orange line = intervention start. Green = cumulative lives saved (right axis).</div>
         </>
       )}
-
       {!cfResult && !cfLoading && (
         <div className="cf-empty">Set parameters and click Compute to see the counterfactual timeline.</div>
       )}
@@ -330,40 +286,26 @@ function CounterfactualTimeline({ params, cfResult, setCfResult, setCfLoading, c
   );
 }
 
-// ── Structural Resilience Score ───────────────────────────────────────────────
 function computeResilienceScores(tracts, result) {
   if (!tracts || !result) return null;
-  const scores = {};
   const attackRates = Object.values(result.tract_metrics).map(m => m.attack_rate);
   const maxAttack   = Math.max(...attackRates) || 1;
-
+  const scores = {};
   tracts.features.forEach(f => {
     const p     = f.properties;
     const geoid = p.GEOID;
     const m     = result.tract_metrics[geoid];
     if (!m) return;
-
-    const attackNorm = m.attack_rate / maxAttack;
-    const vulnScore  = Number(p.vuln_blended || 0);
-    const hubNorm    = Number(p.hub_dist_norm || 0);
-    const surgeNorm  = Number(p.surge_risk    || 0);
-
-    // Structural Resilience Index — higher = more fragile
     const fragility = (
-      0.35 * attackNorm  +
-      0.25 * vulnScore   +
-      0.25 * hubNorm     +
-      0.15 * surgeNorm
+      0.35 * (m.attack_rate / maxAttack) +
+      0.25 * Number(p.vuln_blended || 0) +
+      0.25 * Number(p.hub_dist_norm || 0) +
+      0.15 * Number(p.surge_risk   || 0)
     );
-
-    const resilience = 1 - fragility;
-
     scores[geoid] = {
-      score:    resilience,
+      score:    1 - fragility,
       fragility,
-      tier: resilience > 0.7 ? "resilient"
-          : resilience > 0.4 ? "moderate"
-          : "fragile",
+      tier: (1-fragility) > 0.7 ? "resilient" : (1-fragility) > 0.4 ? "moderate" : "fragile",
     };
   });
   return scores;
@@ -373,57 +315,39 @@ function ResiliencePanel({ resilienceScores, tracts }) {
   if (!resilienceScores || !tracts) return (
     <div className="roi-empty">Run a simulation to compute Structural Resilience Scores.</div>
   );
-
   const rows = tracts.features
-    .map(f => ({
-      geoid:    f.properties.GEOID,
-      county:   COUNTY_NAMES[f.properties.COUNTYFP] || f.properties.COUNTYFP,
-      pop:      Number(f.properties.population || 0),
-      ...resilienceScores[f.properties.GEOID],
-    }))
+    .map(f => ({ geoid: f.properties.GEOID, county: COUNTY_NAMES[f.properties.COUNTYFP]||f.properties.COUNTYFP,
+      pop: Number(f.properties.population||0), ...resilienceScores[f.properties.GEOID] }))
     .filter(r => r.score != null)
     .sort((a,b) => a.score - b.score)
     .slice(0, 25);
-
-  const tierCounts = Object.values(resilienceScores).reduce((acc, r) => {
-    if (r) acc[r.tier] = (acc[r.tier]||0) + 1;
-    return acc;
-  }, {});
-
+  const tc = Object.values(resilienceScores).reduce((a,r)=>{ if(r) a[r.tier]=(a[r.tier]||0)+1; return a; },{});
   return (
     <div className="res-wrap">
       <div className="res-summary">
-        <div className="res-stat fragile"><span>Fragile</span><strong>{tierCounts.fragile||0}</strong></div>
-        <div className="res-stat moderate"><span>Moderate</span><strong>{tierCounts.moderate||0}</strong></div>
-        <div className="res-stat resilient"><span>Resilient</span><strong>{tierCounts.resilient||0}</strong></div>
+        {[["fragile","Fragile"],["moderate","Moderate"],["resilient","Resilient"]].map(([t,l])=>(
+          <div key={t} className={`res-stat ${t}`}><span>{l}</span><strong>{tc[t]||0}</strong></div>
+        ))}
       </div>
       <div className="roi-caveat" style={{marginBottom:10}}>
         Structural Resilience Index combines simulated attack rate, vulnerability, hospital distance, and surge risk.
-        Score 0 = maximally fragile, 1 = maximally resilient.
       </div>
       <div className="eq-table-wrap">
         <table className="eq-table">
-          <thead><tr>
-            <th>#</th><th>County</th><th>Pop</th><th>Score</th><th>Tier</th>
-          </tr></thead>
-          <tbody>
-            {rows.map((r,i) => (
-              <tr key={r.geoid}>
-                <td>{i+1}</td>
-                <td>{r.county}</td>
-                <td>{fmt(r.pop)}</td>
-                <td><span className={`res-badge ${r.tier}`}>{r.score?.toFixed(3)}</span></td>
-                <td><span className={`res-tier ${r.tier}`}>{r.tier}</span></td>
-              </tr>
-            ))}
-          </tbody>
+          <thead><tr><th>#</th><th>County</th><th>Pop</th><th>Score</th><th>Tier</th></tr></thead>
+          <tbody>{rows.map((r,i)=>(
+            <tr key={r.geoid}>
+              <td>{i+1}</td><td>{r.county}</td><td>{fmt(r.pop)}</td>
+              <td><span className={`res-badge ${r.tier}`}>{r.score?.toFixed(3)}</span></td>
+              <td><span className={`res-tier ${r.tier}`}>{r.tier}</span></td>
+            </tr>
+          ))}</tbody>
         </table>
       </div>
     </div>
   );
 }
 
-// ── Compare Modal ─────────────────────────────────────────────────────────────
 function CompareModal({ compareResult, tracts, onClose }) {
   const mapARef = useRef(null); const mapBRef = useRef(null);
   const mapAObj = useRef(null); const mapBObj = useRef(null);
@@ -450,13 +374,12 @@ function CompareModal({ compareResult, tracts, onClose }) {
         ref.current.addLayer({id:"tl",type:"line",source:"t",paint:{"line-color":"#fff","line-width":0.2,"line-opacity":0.12}});
       });
     };
-    setTimeout(()=>{ if(mapARef.current) init(mapARef.current,mapAObj,"base"); if(mapBRef.current) init(mapBRef.current,mapBObj,"delta"); },80);
+    setTimeout(()=>{ if(mapARef.current) init(mapARef.current,mapAObj,"base"); if(mapBRef.current) init(mapBRef.current,mapBObj,"delta"); },200);
     return ()=>{ if(mapAObj.current){mapAObj.current.remove();mapAObj.current=null;} if(mapBObj.current){mapBObj.current.remove();mapBObj.current=null;} };
   },[compareResult,tracts]);
 
   if (!compareResult) return null;
   const a=compareResult.scenario_a.meta, b=compareResult.scenario_b.meta;
-  const saved=Math.round(a.total_R-b.total_R);
   const cd = compareResult.scenario_a.curves.day.map((d,i)=>({
     day:d, Baseline:Math.round(compareResult.scenario_a.curves.I[i]),
     Intervention:Math.round(compareResult.scenario_b.curves.I[i]),
@@ -480,7 +403,7 @@ function CompareModal({ compareResult, tracts, onClose }) {
           <div className="kpi-delta">
             <div className="kpi-delta-row red">−{(a.attack_rate-b.attack_rate).toFixed(1)}%<span>attack rate</span></div>
             <div className="kpi-delta-row green">+{b.peak_day-a.peak_day}d<span>peak delayed</span></div>
-            <div className="kpi-delta-row green">{fmt(saved)}<span>protected</span></div>
+            <div className="kpi-delta-row green">{fmt(Math.round(a.total_R-b.total_R))}<span>protected</span></div>
           </div>
           <div className="kpi-group right">
             <div className="kpi-group-label green">Intervention</div>
@@ -513,7 +436,6 @@ function CompareModal({ compareResult, tracts, onClose }) {
   );
 }
 
-// ── Equity Modal ──────────────────────────────────────────────────────────────
 function EquityModal({ equityData, weaknessData, onClose }) {
   const [tab, setTab] = useState("burden");
   if (!equityData && !weaknessData) return null;
@@ -539,11 +461,9 @@ function EquityModal({ equityData, weaknessData, onClose }) {
             <div className="eq-table-wrap"><table className="eq-table">
               <thead><tr><th>#</th><th>County</th><th>Pop</th><th>Attack</th><th>Vuln</th><th>Hosp.</th><th>Burden</th><th>Peak</th></tr></thead>
               <tbody>{equityData.top_burdened.map((r,i)=>(
-                <tr key={r.GEOID} className={i<5?"high":""}>
-                  <td>{i+1}</td><td>{COUNTY_NAMES[r.COUNTYFP]||r.COUNTYFP}</td>
-                  <td>{fmt(r.population)}</td><td>{pct(r.attack_rate)}</td>
-                  <td>{r.vuln_blended.toFixed(3)}</td><td>{r.hub_dist_km}km</td>
-                  <td className="burden-cell">{r.equity_burden.toFixed(4)}</td><td>{r.peak_day}</td>
+                <tr key={r.GEOID} className={i<5?"high":""}><td>{i+1}</td><td>{COUNTY_NAMES[r.COUNTYFP]||r.COUNTYFP}</td>
+                  <td>{fmt(r.population)}</td><td>{pct(r.attack_rate)}</td><td>{r.vuln_blended.toFixed(3)}</td>
+                  <td>{r.hub_dist_km}km</td><td className="burden-cell">{r.equity_burden.toFixed(4)}</td><td>{r.peak_day}</td>
                 </tr>
               ))}</tbody>
             </table></div>
@@ -555,8 +475,7 @@ function EquityModal({ equityData, weaknessData, onClose }) {
             <div className="eq-table-wrap"><table className="eq-table">
               <thead><tr><th>#</th><th>County</th><th>Pop</th><th>Vuln</th><th>Surge</th><th>Poverty</th><th>Uninsured</th><th>Score</th></tr></thead>
               <tbody>{weaknessData.map((r,i)=>(
-                <tr key={r.GEOID} className={i<5?"high":""}>
-                  <td>{i+1}</td><td>{COUNTY_NAMES[r.COUNTYFP]||r.COUNTYFP}</td>
+                <tr key={r.GEOID} className={i<5?"high":""}><td>{i+1}</td><td>{COUNTY_NAMES[r.COUNTYFP]||r.COUNTYFP}</td>
                   <td>{fmt(r.population)}</td><td>{Number(r.vuln_blended).toFixed(3)}</td>
                   <td>{Number(r.surge_risk||0).toFixed(3)}</td><td>{pct(r.pct_poverty)}</td>
                   <td>{pct(r.pct_uninsured)}</td><td className="burden-cell">{Number(r.structural_score||0).toFixed(3)}</td>
@@ -570,12 +489,12 @@ function EquityModal({ equityData, weaknessData, onClose }) {
   );
 }
 
-// ── Bottom Drawer ─────────────────────────────────────────────────────────────
 function BottomDrawer({ result, compareResult, params, open, onToggle }) {
   const m = result?.meta;
   const preset = PRESETS.find(p => Math.abs(p.beta-params.beta)<0.01);
   const narrative = m
-    ? `Under a ${preset?.label||"custom"} scenario (R₀ = ${m.R0}), the epidemic peaks at ${fmt(m.peak_I)} simultaneous infections on day ${m.peak_day}, with a statewide attack rate of ${m.attack_rate}%. ${fmt(m.total_R)} people are infected over ${params.days} days.${compareResult?` Early intervention protects ${fmt(Math.round(compareResult.scenario_a.meta.total_R-compareResult.scenario_b.meta.total_R))} people and delays peak by ${compareResult.scenario_b.meta.peak_day-compareResult.scenario_a.meta.peak_day} days.`:""}` : null;
+    ? `Under a ${preset?.label||"custom"} scenario (R₀ = ${m.R0}), the epidemic peaks at ${fmt(m.peak_I)} simultaneous infections on day ${m.peak_day}, with a statewide attack rate of ${m.attack_rate}%. ${fmt(m.total_R)} people are infected over ${params.days} days.${compareResult?` Intervention saves ${fmt(Math.round(compareResult.scenario_a.meta.total_R-compareResult.scenario_b.meta.total_R))} people.`:""}`
+    : null;
 
   const cd = result ? result.curves.day.map((d,i)=>({
     day:d, S:Math.round(result.curves.S[i]), E:Math.round(result.curves.E[i]),
@@ -616,16 +535,14 @@ function BottomDrawer({ result, compareResult, params, open, onToggle }) {
   );
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────────────────
 const TABS = [
-  { id:"model",    icon:"⚙",  label:"Model"      },
-  { id:"scenario", icon:"↔",  label:"Compare"    },
-  { id:"phase5",   icon:"◈",  label:"Insights"   },
-  { id:"results",  icon:"◉",  label:"Results"    },
-  { id:"equity",   icon:"⊕",  label:"Equity"     },
+  { id:"model",    icon:"⚙",  label:"Model"    },
+  { id:"scenario", icon:"↔",  label:"Compare"  },
+  { id:"phase5",   icon:"◈",  label:"Insights" },
+  { id:"results",  icon:"◉",  label:"Results"  },
+  { id:"equity",   icon:"⊕",  label:"Equity"   },
 ];
 
-// ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const mapContainer = useRef(null);
   const map          = useRef(null);
@@ -659,24 +576,29 @@ export default function App() {
   const [resilienceScores, setResilienceScores] = useState(null);
   const [phase5Tab,        setPhase5Tab]        = useState("roi");
 
-// Init map
-useEffect(() => {
-  if (map.current) return;
-  setTimeout(() => {
-    if (!mapContainer.current) return;
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: "mapbox://styles/mapbox/dark-v11",
-      center: [-120.5, 47.4],
-      zoom: 6.2,
-    });
-    map.current.on("load", () => {
-      setMapReady(true);
-      map.current.resize();
-    });
-    map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
-  }, 500);
-}, []);
+  // Init map — delay to allow flex layout to settle in production
+  useEffect(() => {
+    if (map.current) return;
+    const timer = setTimeout(() => {
+      if (!mapContainer.current) return;
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [-120.5, 47.4],
+        zoom: 6.2,
+      });
+      map.current.on("load", () => {
+        setMapReady(true);
+        map.current.resize();
+      });
+      map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+      // Extra resize calls to catch any layout settling
+      setTimeout(() => map.current?.resize(), 100);
+      setTimeout(() => map.current?.resize(), 500);
+      setTimeout(() => map.current?.resize(), 1500);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Load tracts
   useEffect(() => {
@@ -807,7 +729,6 @@ useEffect(() => {
       </header>
 
       <div className="layout">
-        {/* Tab Rail */}
         <div className="tab-rail">
           {TABS.map(t=>(
             <button key={t.id} className={`tab-rail-btn ${activeTab===t.id?"active":""}`}
@@ -818,11 +739,8 @@ useEffect(() => {
           ))}
         </div>
 
-        {/* Side Drawer */}
         {activeTab && (
           <div className="side-drawer">
-
-            {/* MODEL */}
             {activeTab==="model" && (
               <div className="drawer-content">
                 <div className="ds-title">Pathogen</div>
@@ -858,7 +776,6 @@ useEffect(() => {
               </div>
             )}
 
-            {/* COMPARE */}
             {activeTab==="scenario" && (
               <div className="drawer-content">
                 <div className="ds-title">Scenario A — Baseline</div>
@@ -871,14 +788,13 @@ useEffect(() => {
                   <div className="compare-summary">
                     <div className="cs-row"><span>Baseline attack</span><strong>{compareResult.scenario_a.meta.attack_rate}%</strong></div>
                     <div className="cs-row"><span>Intervention attack</span><strong>{compareResult.scenario_b.meta.attack_rate}%</strong></div>
-                    <div className="cs-row green"><span>Lives protected</span><strong>{fmt(compareResult.scenario_a.meta.total_R-compareResult.scenario_b.meta.total_R)}</strong></div>
+                    <div className="cs-row green"><span>Lives protected</span><strong>{fmt(Math.round(compareResult.scenario_a.meta.total_R-compareResult.scenario_b.meta.total_R))}</strong></div>
                     <button className="cs-view-btn" onClick={()=>setShowCompareModal(true)}>View full comparison →</button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* INSIGHTS (Phase 5) */}
             {activeTab==="phase5" && (
               <div className="drawer-content">
                 <div className="p5-tabs">
@@ -887,17 +803,11 @@ useEffect(() => {
                   ))}
                 </div>
                 {phase5Tab==="roi" && <ROICalculator result={result} compareResult={compareResult} />}
-                {phase5Tab==="cf"  && (
-                  <CounterfactualTimeline
-                    params={params} cfResult={cfResult}
-                    setCfResult={setCfResult} setCfLoading={setCfLoading} cfLoading={cfLoading}
-                  />
-                )}
+                {phase5Tab==="cf"  && <CounterfactualTimeline params={params} cfResult={cfResult} setCfResult={setCfResult} setCfLoading={setCfLoading} cfLoading={cfLoading} />}
                 {phase5Tab==="res" && <ResiliencePanel resilienceScores={resilienceScores} tracts={tracts} />}
               </div>
             )}
 
-            {/* RESULTS */}
             {activeTab==="results" && (
               <div className="drawer-content">
                 {result ? <>
@@ -917,11 +827,10 @@ useEffect(() => {
               </div>
             )}
 
-            {/* EQUITY */}
             {activeTab==="equity" && (
               <div className="drawer-content">
                 <div className="ds-title">Equity Analysis</div>
-                <p className="drawer-note">Identifies communities facing the highest compounded epidemic burden — attack rate amplified by vulnerability and hospital distance.</p>
+                <p className="drawer-note">Identifies communities facing the highest compounded epidemic burden.</p>
                 <button className="drawer-run-btn purple" onClick={runEquity} disabled={equityLoading||!result}>{equityLoading?"Analyzing…":"⊕  Run Equity Analysis"}</button>
                 {!result && <p className="drawer-note" style={{marginTop:8}}>Run a simulation first.</p>}
                 {equityData && (
@@ -936,9 +845,8 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Map */}
         <main className="map-main">
-          <div ref={mapContainer} className="map" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+          <div ref={mapContainer} className="map" />
           <MapLegend mapMode={mapMode} />
           <MapPills mapMode={mapMode} setMapMode={setMapMode} result={result}
             playing={playing} setPlaying={setPlaying} playDay={playDay}
