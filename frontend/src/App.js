@@ -662,22 +662,22 @@ export default function App() {
 // Init map
 useEffect(() => {
   if (map.current) return;
-  const container = mapContainer.current;
-  if (!container) return;
-
-  const initMap = () => {
-    map.current = new mapboxgl.Map({
-      container,
-      style: "mapbox://styles/mapbox/dark-v11",
-      center: [-120.5, 47.4],
-      zoom: 6.2,
-    });
-    map.current.on("load", () => {
-      setMapReady(true);
-      map.current.resize();
-    });
-    map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
-  };
+  setTimeout(() => {
+    if (mapContainer.current) {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [-120.5, 47.4],
+        zoom: 6.2,
+      });
+      map.current.on("load", () => {
+        setMapReady(true);
+        map.current.resize();
+      });
+      map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+    }
+  }, 500);
+}, []);
 
   // Wait until container has non-zero width
   const observer = new ResizeObserver(entries => {
