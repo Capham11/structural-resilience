@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import mapboxgl from "maplibre-gl";
+import mapboxgl from "maplibre-gl/dist/maplibre-gl";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
