@@ -1,15 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import mapboxgl from "mapbox-gl";
+import mapboxgl from "maplibre-gl";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from "recharts";
 import axios from "axios";
-import "mapbox-gl/dist/mapbox-gl.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 import "./App.css";
-
-mapboxgl.accessToken = "pk.eyJ1IjoiY2hyaXN0b3BoZXJwaGFtIiwiYSI6ImNtcXZlbTRqZzEyeXEydXExZzl0aWJiaHMifQ.o58ZrcJwSDHNwV98157itA";
 
 const API = "https://structural-resilience-production.up.railway.app";
 
@@ -583,7 +581,7 @@ export default function App() {
       if (!mapContainer.current) return;
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
-        style: "mapbox://styles/mapbox/dark-v11",
+        style: "https://demotiles.maplibre.org/style.json",
         center: [-120.5, 47.4],
         zoom: 6.2,
       });
