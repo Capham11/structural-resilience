@@ -719,7 +719,7 @@ export default function App() {
       <header className="header">
         <div className="header-left">
           <span className="header-tag">Sevengill Labs</span>
-          <h1 className="header-title">WA State Epidemic Intelligence</h1>
+          <h1 className="header-title">Mako Epidemic Intel (WA Beta)</h1>
         </div>
         <div className="header-center"><span className="header-status">{statusMsg}</span></div>
         <div className="header-right">
