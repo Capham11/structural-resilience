@@ -87,16 +87,17 @@ body { background: var(--bg); color: var(--t1); font-family: var(--f); font-size
 .tab-icon  { font-size: 17px; line-height: 1; }
 .tab-label { font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--fm); }
 
-/* Side Drawer — floating island, sized to its own content (not stretched
-   to the full column height like a flex child normally would be), capped
-   so long tabs (Model) still scroll instead of overflowing the layout. */
+/* Side Drawer — a floating card over the map, detached from the tab rail
+   (not a flex sibling sharing width with it), sized to its own content and
+   capped so long tabs (Model) scroll instead of overflowing the viewport.
+   Collapsing it (activeTab===null) leaves the map at full width since
+   map-main never had to share space with it in the first place. */
 .side-drawer {
-  width: 248px; flex-shrink: 0;
+  position: absolute; top: 12px; left: 16px; z-index: 8;
+  width: 248px;
   background: var(--s1); border: 1px solid var(--b1);
   border-radius: var(--r4);
-  margin: 12px 10px 12px 8px;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.35);
-  align-self: flex-start;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.45);
   max-height: calc(100% - 24px);
   overflow-y: auto; overflow-x: hidden;
 }

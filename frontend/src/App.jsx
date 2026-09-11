@@ -779,7 +779,10 @@ export default function App() {
           ))}
         </div>
 
-        {activeTab && (
+        <main className="map-main">
+          <div ref={mapContainer} className="map" />
+
+          {activeTab && (
           <div className="side-drawer">
             {activeTab==="model" && (
               <div className="drawer-content">
@@ -896,10 +899,8 @@ export default function App() {
               </div>
             )}
           </div>
-        )}
+          )}
 
-        <main className="map-main">
-          <div ref={mapContainer} className="map" />
           <MapLegend mapMode={mapMode} />
           <MapPills mapMode={mapMode} setMapMode={setMapMode} result={result}
             playing={playing} setPlaying={setPlaying} playDay={playDay}
