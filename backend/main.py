@@ -34,6 +34,17 @@ SURVEILLANCE_DB_CANDIDATES = [
     BASE_DIR.parent / "data" / "surveillance.db",
 ]
 
+# Hospital-distance data (GEOID, HubName, HubDist) — computed once via a
+# manual QGIS "distance to nearest hub" join and never actually carried
+# through phase2_vulnerability_pull.py's export, so it never made it into
+# washington_vulnerability_enriched.geojson. hub_distance.csv is a small
+# (GEOID, HubName, HubDist) extract of that join, checked in alongside this
+# file; the outbreak_model path is a local-dev fallback.
+HUB_DISTANCE_CANDIDATES = [
+    BASE_DIR / "hub_distance.csv",
+    BASE_DIR.parent / "outbreak_model" / "data" / "washington_base_structural_resilience.geojson",
+]
+
 # ==================================================
 # APP INIT
 # ==================================================
@@ -62,6 +73,47 @@ tracts["population"] = pd.to_numeric(tracts["population"], errors="coerce")
 tracts = tracts.dropna(subset=["population"])
 tracts = tracts[tracts["population"] > 0].copy()
 tracts = tracts.reset_index(drop=True)
+
+# ---- Merge in hospital-distance data (see HUB_DISTANCE_CANDIDATES above) ----
+tracts["GEOID"] = tracts["GEOID"].astype(str).str.zfill(11)
+
+hub_df = None
+for _p in HUB_DISTANCE_CANDIDATES:
+    if not _p.exists():
+        continue
+    if _p.suffix == ".csv":
+        hub_df = pd.read_csv(_p, dtype={"GEOID": str})
+    else:
+        hub_df = gpd.read_file(_p)[["GEOID", "HubName", "HubDist"]]
+    hub_df["GEOID"] = hub_df["GEOID"].astype(str).str.zfill(11)
+    hub_df = hub_df.drop_duplicates(subset="GEOID")
+    break
+
+if hub_df is not None:
+    tracts = tracts.merge(hub_df, on="GEOID", how="left").reset_index(drop=True)
+    tracts["HubDist"] = pd.to_numeric(tracts["HubDist"], errors="coerce")
+
+    hub_min, hub_max = tracts["HubDist"].min(), tracts["HubDist"].max()
+    if pd.notna(hub_min) and pd.notna(hub_max) and hub_max > hub_min:
+        tracts["hub_dist_norm"] = (tracts["HubDist"] - hub_min) / (hub_max - hub_min)
+    else:
+        tracts["hub_dist_norm"] = 0.0
+    tracts["hub_dist_norm"] = tracts["hub_dist_norm"].fillna(0.0)
+
+    # Structural surge-risk proxy: equal blend of hospital distance and
+    # baseline vulnerability (no formula for this existed anywhere in the
+    # pipeline before — this is a simple, documented composite, not a
+    # restored original computation).
+    vuln_for_surge = tracts["vuln_blended"].fillna(0) if "vuln_blended" in tracts.columns else 0
+    tracts["surge_risk"] = 0.5 * tracts["hub_dist_norm"] + 0.5 * vuln_for_surge
+
+    matched = tracts["HubDist"].notna().sum()
+    print(f"  Merged hospital-distance data — {matched}/{len(tracts)} tracts matched")
+else:
+    print("  ⚠ No hospital-distance data found (checked: "
+          f"{', '.join(str(p) for p in HUB_DISTANCE_CANDIDATES)}) — "
+          "HubDist/hub_dist_norm/surge_risk will be unavailable; surge markers "
+          "and the Hospital map layer will show no data.")
 
 N   = len(tracts)
 pop = tracts["population"].to_numpy(dtype=np.float64)

@@ -87,10 +87,17 @@ body { background: var(--bg); color: var(--t1); font-family: var(--f); font-size
 .tab-icon  { font-size: 17px; line-height: 1; }
 .tab-label { font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--fm); }
 
-/* Side Drawer */
+/* Side Drawer — floating island, sized to its own content (not stretched
+   to the full column height like a flex child normally would be), capped
+   so long tabs (Model) still scroll instead of overflowing the layout. */
 .side-drawer {
   width: 248px; flex-shrink: 0;
-  background: var(--s1); border-right: 1px solid var(--b1);
+  background: var(--s1); border: 1px solid var(--b1);
+  border-radius: var(--r4);
+  margin: 12px 10px 12px 8px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+  align-self: flex-start;
+  max-height: calc(100% - 24px);
   overflow-y: auto; overflow-x: hidden;
 }
 .side-drawer::-webkit-scrollbar { width: 0; }
@@ -388,6 +395,7 @@ body { background: var(--bg); color: var(--t1); font-family: var(--f); font-size
 .kpi-delta { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 20px; gap: 6px; }
 .kpi-delta-row { font-family: var(--fm); font-size: 15px; font-weight: 800; color: var(--red); display: flex; flex-direction: column; align-items: center; }
 .kpi-delta-row.green { color: var(--green); }
+.kpi-delta-row.amber { color: var(--orange); }
 .kpi-delta-row span { font-size: 8px; font-weight: 700; color: var(--tm); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 1px; font-family: var(--fm); }
 
 .modal-section { padding: 10px 20px; border-bottom: 1px solid var(--b1); }

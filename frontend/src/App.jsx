@@ -14,6 +14,11 @@ mapboxgl.accessToken = "pk.eyJ1IjoiY2hyaXN0b3BoZXJwaGFtIiwiYSI6ImNtcXZlbTRqZzEye
 
 const API = "https://structural-resilience-production.up.railway.app";
 
+// Feature flags — toggle without deleting the underlying implementation.
+const FEATURES = {
+  exportCSV: false, // CSV export button hidden for now; exportCSV() is still wired up below.
+};
+
 const PRESETS = [
   { label: "COVID-19",  beta: 0.225, sigma: 0.1667, gamma: 0.1,   days: 200 },
   { label: "Influenza", beta: 0.15,  sigma: 0.2,    gamma: 0.143, days: 150 },
@@ -56,6 +61,17 @@ const LEGEND_CONFIG = {
 export const fmt  = n => n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
 export const pct  = n => n != null ? `${(n*100).toFixed(1)}%` : "—";
 export const dark = { background: "#111827", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 };
+
+// Peak-day shift (intervention peak_day - baseline peak_day) is not always
+// positive: cutting transmission mid-growth-phase can bring a much smaller
+// peak forward in time rather than delay it (confirmed against the model —
+// not a bug in the number itself). Every place that shows this delta needs
+// to say which direction it went instead of assuming "delayed."
+export function fmtPeakShift(days) {
+  if (!days) return "No change";
+  const abs = Math.abs(days);
+  return days > 0 ? `+${abs}d later` : `${abs}d earlier`;
+}
 
 export function Slider({ label, note, min, max, step, value, onChange, unit="" }) {
   return (
@@ -156,14 +172,14 @@ function VulnRadar({ tract, stateAvg }) {
   return (
     <div className="radar-wrap">
       <div className="radar-title">Vulnerability Fingerprint</div>
-      <ResponsiveContainer width="100%" height={175}>
-        <RadarChart data={data}>
+      <ResponsiveContainer width="100%" height={220}>
+        <RadarChart data={data} outerRadius="62%" margin={{ top: 12, right: 24, bottom: 12, left: 24 }}>
           <PolarGrid stroke="rgba(255,255,255,0.07)" />
           <PolarAngleAxis dataKey="dim" tick={{ fontSize: 8, fill: "#64748b" }} />
           <PolarRadiusAxis angle={90} domain={[0,50]} tick={{ fontSize: 7, fill: "#475569" }} />
           <Radar name="Tract" dataKey="tract" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} />
           <Radar name="State avg" dataKey="state" stroke="#f97316" fill="#f97316" fillOpacity={0.08} strokeDasharray="4 2" />
-          <Legend wrapperStyle={{ fontSize: 9, color: "#64748b" }} />
+          <Legend wrapperStyle={{ fontSize: 9, color: "#64748b", paddingTop: 8 }} />
         </RadarChart>
       </ResponsiveContainer>
     </div>
@@ -190,8 +206,8 @@ function ROICalculator({ result, compareResult }) {
         {[
           ["Total infections prevented", fmt(saved),        "#22c55e"],
           ["Peak infectious reduced by",  fmt(peakCut),      "#22c55e"],
-          ["Peak delayed by",             `${b.peak_day - a.peak_day} days`, "#3b82f6"],
-          ["Attack rate reduction",       `${(a.attack_rate - b.attack_rate).toFixed(1)}%`, "#3b82f6"],
+          ["Peak timing shift",           fmtPeakShift(b.peak_day - a.peak_day), "#3b82f6"],
+          ["Attack rate reduction",       `${(a.attack_rate - b.attack_rate).toFixed(1)} pts`, "#3b82f6"],
         ].map(([l,v,c]) => (
           <div key={l} className="roi-card"><span>{l}</span><strong style={{color:c}}>{v}</strong></div>
         ))}
@@ -255,7 +271,7 @@ function CounterfactualTimeline({ params, cfResult, setCfResult, setCfLoading, c
             {[
               ["Lives protected", fmt(cfResult.summary.total_lives_saved), "#22c55e"],
               ["Peak reduced",    fmt(cfResult.summary.peak_reduction),    "#3b82f6"],
-              ["Peak delayed",    `${cfResult.summary.peak_delay_days}d`,  "#a855f7"],
+              ["Peak timing",     fmtPeakShift(cfResult.summary.peak_delay_days), "#a855f7"],
               ["Attack rate",     `${cfResult.summary.attack_rate_base}% → ${cfResult.summary.attack_rate_intv}%`, "#ef4444"],
             ].map(([l,v,c]) => (
               <div key={l} className="cf-kpi"><span>{l}</span><strong style={{color:c}}>{v}</strong></div>
@@ -383,6 +399,7 @@ function CompareModal({ compareResult, tracts, onClose }) {
 
   if (!compareResult) return null;
   const a=compareResult.scenario_a.meta, b=compareResult.scenario_b.meta;
+  const peakShiftDays = b.peak_day - a.peak_day;
   const cd = compareResult.scenario_a.curves.day.map((d,i)=>({
     day:d, Baseline:Math.round(compareResult.scenario_a.curves.I[i]),
     Intervention:Math.round(compareResult.scenario_b.curves.I[i]),
@@ -404,8 +421,8 @@ function CompareModal({ compareResult, tracts, onClose }) {
             ))}
           </div>
           <div className="kpi-delta">
-            <div className="kpi-delta-row red">−{(a.attack_rate-b.attack_rate).toFixed(1)}%<span>attack rate</span></div>
-            <div className="kpi-delta-row green">+{b.peak_day-a.peak_day}d<span>peak delayed</span></div>
+            <div className="kpi-delta-row red">−{(a.attack_rate-b.attack_rate).toFixed(1)}pts<span>attack rate</span></div>
+            <div className={`kpi-delta-row ${peakShiftDays<0?"amber":"green"}`}>{fmtPeakShift(peakShiftDays)}<span>{peakShiftDays<0?"peak arrived earlier":"peak delayed"}</span></div>
             <div className="kpi-delta-row green">{fmt(Math.round(a.total_R-b.total_R))}<span>protected</span></div>
           </div>
           <div className="kpi-group right">
@@ -615,7 +632,7 @@ export default function App() {
       const avg = {};
       dims.forEach(d => { avg[d] = features.reduce((s,f)=>s+Number(f.properties[d]||0),0)/features.length; });
       setStateAvg(avg);
-      map.current.addSource("tracts",{type:"geojson",data:res.data});
+      map.current.addSource("tracts",{type:"geojson",data:res.data,promoteId:"GEOID"});
       map.current.addLayer({id:"tracts-fill",type:"fill",source:"tracts",paint:{
         "fill-color":["interpolate",["linear"],["coalesce",["get","vuln_blended"],0],0,"#0d1b2a",0.25,"#1e3a5f",0.5,"#f97316",1,"#dc2626"],
         "fill-opacity":0.75}});
@@ -629,34 +646,49 @@ export default function App() {
     }).catch(()=>setStatusMsg("⚠ API unreachable"));
   }, [mapReady]);
 
-  // Update map colors
+  // Update map colors — drives fill-color off feature-state (set per frame
+  // via setFeatureState) rather than rebuilding the GeoJSON source and
+  // calling setData() every tick. setData() re-parses and re-tiles the
+  // entire source, which is why playback used to be choppy at 25fps with
+  // ~1,770 features; feature-state only touches the paint attribute buffer.
   useEffect(() => {
     if (!mapReady||!map.current.getSource("tracts")||!tracts) return;
-    const updated = { ...tracts, features: tracts.features.map(f => {
-      const g=f.properties.GEOID; let val=0;
-      const isSurveillanceMode = mapMode==="hospital_capacity"||mapMode==="vaccination_coverage";
-      if (mapMode==="vuln"||(!result&&!isSurveillanceMode)) val=f.properties.vuln_blended||0;
-      else if (mapMode==="peak_I")                 val=result.tract_metrics[g]?result.tract_metrics[g].peak_I/5000:0;
-      else if (mapMode==="attack")                 val=result.tract_metrics[g]?result.tract_metrics[g].attack_rate:0;
-      else if (mapMode==="delta"&&compareResult)   val=Math.min((compareResult.delta[g]||0)*5,1);
-      else if (mapMode==="healthcare")             val=f.properties.hub_dist_norm||0;
-      else if (mapMode==="equity"&&equityData)     { const eq=equityData.all_tracts?.find(r=>r.GEOID===g); val=eq?Math.min(eq.equity_burden*20,1):0; }
-      else if (mapMode==="resilience"&&resilienceScores) val=resilienceScores[g]?resilienceScores[g].fragility:0;
-      else if (mapMode==="hospital_capacity")      val=surveillanceValues[g]?.value ?? 0;
-      else if (mapMode==="vaccination_coverage")   val=surveillanceValues[g]?.value!=null?1-surveillanceValues[g].value:0;
-      else if (mapMode==="playback"&&result.snapshots) {
-        const sds=Object.keys(result.snapshots).map(Number).sort((a,b)=>a-b);
-        const nd=sds.reduce((p,c)=>Math.abs(c-playDay)<Math.abs(p-playDay)?c:p,sds[0]);
+
+    // Build once per equityData change instead of .find()-ing per tract per frame.
+    const equityByGeoid = equityData?.all_tracts
+      ? new Map(equityData.all_tracts.map(r => [r.GEOID, r]))
+      : null;
+
+    const snapshotDays = (mapMode==="playback" && result?.snapshots)
+      ? Object.keys(result.snapshots).map(Number).sort((a,b)=>a-b)
+      : null;
+
+    tracts.features.forEach(f => {
+      const g = f.properties.GEOID;
+      const vuln = f.properties.vuln_blended || 0;
+      let val;
+      if (mapMode==="vuln") val=vuln;
+      else if (mapMode==="peak_I")      val = result ? (result.tract_metrics[g]?.peak_I/5000 || 0) : vuln;
+      else if (mapMode==="attack")      val = result ? (result.tract_metrics[g]?.attack_rate || 0) : vuln;
+      else if (mapMode==="delta")       val = compareResult ? Math.min((compareResult.delta[g]||0)*5,1) : vuln;
+      else if (mapMode==="healthcare")  val = f.properties.hub_dist_norm||0;
+      else if (mapMode==="equity")      val = equityByGeoid ? Math.min((equityByGeoid.get(g)?.equity_burden||0)*20,1) : vuln;
+      else if (mapMode==="resilience")  val = resilienceScores ? (resilienceScores[g]?.fragility||0) : vuln;
+      else if (mapMode==="hospital_capacity")    val = surveillanceValues[g]?.value ?? 0;
+      else if (mapMode==="vaccination_coverage") val = surveillanceValues[g]?.value!=null?1-surveillanceValues[g].value:0;
+      else if (mapMode==="playback"&&snapshotDays) {
+        const nd=snapshotDays.reduce((p,c)=>Math.abs(c-playDay)<Math.abs(p-playDay)?c:p,snapshotDays[0]);
         val=Math.min(((result.snapshots[nd]||{})[g]||0)/(f.properties.population||1),1);
       }
-      return {...f,properties:{...f.properties,_val:Math.min(Math.max(val,0),1)}};
-    })};
-    map.current.getSource("tracts").setData(updated);
+      else val = vuln;
+      map.current.setFeatureState({source:"tracts", id:g}, {val: Math.min(Math.max(val,0),1)});
+    });
+
     const ramp = mapMode==="healthcare"
-      ? ["interpolate",["linear"],["coalesce",["get","_val"],0],0,"#0d2a1a",0.3,"#166534",0.6,"#f97316",1,"#dc2626"]
+      ? ["interpolate",["linear"],["coalesce",["feature-state","val"],0],0,"#0d2a1a",0.3,"#166534",0.6,"#f97316",1,"#dc2626"]
       : mapMode==="equity"
-      ? ["interpolate",["linear"],["coalesce",["get","_val"],0],0,"#0d1b2a",0.2,"#1e3a5f",0.5,"#7c3aed",1,"#dc2626"]
-      : ["interpolate",["linear"],["coalesce",["get","_val"],0],0,"#0d1b2a",0.05,"#1e3a5f",0.2,"#1d6fa8",0.5,"#f97316",1,"#dc2626"];
+      ? ["interpolate",["linear"],["coalesce",["feature-state","val"],0],0,"#0d1b2a",0.2,"#1e3a5f",0.5,"#7c3aed",1,"#dc2626"]
+      : ["interpolate",["linear"],["coalesce",["feature-state","val"],0],0,"#0d1b2a",0.05,"#1e3a5f",0.2,"#1d6fa8",0.5,"#f97316",1,"#dc2626"];
     map.current.setPaintProperty("tracts-fill","fill-color",ramp);
     if (showSurge&&result&&map.current.getLayer("surge-outline")) {
       const ids=tracts.features.filter(f=>Number(f.properties.HubDist||0)>30000&&result.tract_metrics[f.properties.GEOID]?.peak_I/(Number(f.properties.population)||1)>0.1).map(f=>f.properties.GEOID);
@@ -732,7 +764,7 @@ export default function App() {
         <div className="header-center"><span className="header-status">{statusMsg}</span></div>
         <div className="header-right">
           {compareResult && <button className="hdr-btn purple" onClick={()=>setShowCompareModal(true)}>↔ Comparison</button>}
-          {result && <button className="hdr-btn" onClick={exportCSV}>↓ Export</button>}
+          {FEATURES.exportCSV && result && <button className="hdr-btn" onClick={exportCSV}>↓ Export</button>}
         </div>
       </header>
 
