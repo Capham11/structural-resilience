@@ -249,6 +249,12 @@ body { background: var(--bg); color: var(--t1); font-family: var(--f); font-size
 .tc-res.moderate  { color: #fed7aa; }
 .tc-res.resilient { color: #bbf7d0; }
 
+/* Surveillance (Phase 6) */
+.surv-badge { font-family: var(--fm); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.surv-badge.observed      { color: #bbf7d0; }
+.surv-badge.carry-forward { color: #fed7aa; }
+.surv-badge.demo          { color: #fcd34d; }
+
 /* Radar */
 .radar-wrap { margin-top: 8px; }
 .radar-title { font-size: 8.5px; font-weight: 800; letter-spacing: 0.14em; color: var(--tm); font-family: var(--fm); margin-bottom: 4px; text-transform: uppercase; }

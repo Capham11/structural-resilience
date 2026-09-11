@@ -6,6 +6,7 @@ Spatial SEIR Model — Washington State
 from pathlib import Path
 from typing import Optional
 import json
+import sqlite3
 
 import numpy as np
 import pandas as pd
@@ -23,6 +24,15 @@ from libpysal.weights import Queen
 
 BASE_DIR  = Path(__file__).parent
 DATA_PATH = BASE_DIR / "washington_vulnerability_enriched.geojson"
+
+# Surveillance streams (Phase 6) live in a separate SQLite table, written by
+# surveillance/ingest_hospital_capacity.py and ingest_vaccination_coverage.py.
+# Check for a co-located copy first (same convention as DATA_PATH above),
+# then fall back to the repo-root data/ layout used in local dev.
+SURVEILLANCE_DB_CANDIDATES = [
+    BASE_DIR / "surveillance.db",
+    BASE_DIR.parent / "data" / "surveillance.db",
+]
 
 # ==================================================
 # APP INIT
@@ -402,3 +412,88 @@ def counterfactual(req: SimulationRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================================================
+# SURVEILLANCE (Phase 6) — hospital capacity + vaccination coverage
+# ==================================================
+
+def get_surveillance_conn():
+    """Read-only connection to the surveillance DB, or None if not present yet."""
+    for p in SURVEILLANCE_DB_CANDIDATES:
+        if p.exists():
+            return sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    return None
+
+
+@app.get("/surveillance/weeks")
+def surveillance_weeks(stream: str):
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"stream": stream, "available": False, "weeks": []}
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT week FROM tract_timeseries WHERE stream = ? ORDER BY week",
+            (stream,),
+        ).fetchall()
+        weeks = [r[0] for r in rows]
+        return {"stream": stream, "available": len(weeks) > 0, "weeks": weeks}
+    except sqlite3.OperationalError:
+        # table doesn't exist yet
+        return {"stream": stream, "available": False, "weeks": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/surveillance/tracts")
+def surveillance_tracts(stream: str, week: str):
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"stream": stream, "week": week, "available": False, "tracts": {}}
+    try:
+        rows = conn.execute(
+            "SELECT tract_id, value, confidence, interpolation_method "
+            "FROM tract_timeseries WHERE stream = ? AND week = ?",
+            (stream, week),
+        ).fetchall()
+        tracts_out = {
+            tract_id: {
+                "value": value,
+                "confidence": confidence,
+                "interpolation_method": method,
+            }
+            for tract_id, value, confidence, method in rows
+        }
+        return {"stream": stream, "week": week, "available": len(tracts_out) > 0, "tracts": tracts_out}
+    except sqlite3.OperationalError:
+        return {"stream": stream, "week": week, "available": False, "tracts": {}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/surveillance/timeseries")
+def surveillance_timeseries(tract_id: str, stream: str):
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"tract_id": tract_id, "stream": stream, "available": False, "series": []}
+    try:
+        rows = conn.execute(
+            "SELECT week, value, confidence, interpolation_method "
+            "FROM tract_timeseries WHERE stream = ? AND tract_id = ? ORDER BY week",
+            (stream, tract_id),
+        ).fetchall()
+        series = [
+            {"week": week, "value": value, "confidence": confidence, "interpolation_method": method}
+            for week, value, confidence, method in rows
+        ]
+        return {"tract_id": tract_id, "stream": stream, "available": len(series) > 0, "series": series}
+    except sqlite3.OperationalError:
+        return {"tract_id": tract_id, "stream": stream, "available": False, "series": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()

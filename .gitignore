@@ -15,6 +15,11 @@ outbreak_model/outputs/*.geojson
 outbreak_model/outputs/*.png
 outbreak_model/outputs/*.csv
 
+# Surveillance — raw inputs may be facility/health-data exports, and the
+# generated DB shouldn't be committed either
+surveillance/data/raw/*.csv
+data/surveillance.db
+
 # Mac
 .DS_Store
 frontend/.env

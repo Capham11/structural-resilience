@@ -8,6 +8,7 @@ import {
 import axios from "axios";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "./App.css";
+import SurveillanceTab from "./SurveillanceTab.jsx";
 
 mapboxgl.accessToken = "pk.eyJ1IjoiY2hyaXN0b3BoZXJwaGFtIiwiYSI6ImNtcXZlbTRqZzEyeXEydXExZzl0aWJiaHMifQ.o58ZrcJwSDHNwV98157itA";
 
@@ -48,13 +49,15 @@ const LEGEND_CONFIG = {
   playback:   { label: "Active Infections",    low: "0%",       high: "High",    colors: ["#0d1b2a","#1e3a5f","#1d6fa8","#f97316","#dc2626"] },
   equity:     { label: "Equity Burden",        low: "Low",      high: "High",    colors: ["#0d1b2a","#1e3a5f","#7c3aed","#dc2626"] },
   resilience: { label: "Structural Resilience",low: "Resilient",high: "Fragile", colors: ["#0d2a1a","#166534","#f97316","#dc2626"] },
+  hospital_capacity:    { label: "Hospital Capacity Strain", low: "Slack",       high: "Strained",        colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
+  vaccination_coverage: { label: "Vaccination Coverage",     low: "Well Covered",high: "Under-Vaccinated",colors: ["#0d2a1a","#166534","#f97316","#dc2626"] },
 };
 
-const fmt  = n => n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
-const pct  = n => n != null ? `${(n*100).toFixed(1)}%` : "—";
-const dark = { background: "#111827", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 };
+export const fmt  = n => n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+export const pct  = n => n != null ? `${(n*100).toFixed(1)}%` : "—";
+export const dark = { background: "#111827", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 };
 
-function Slider({ label, note, min, max, step, value, onChange, unit="" }) {
+export function Slider({ label, note, min, max, step, value, onChange, unit="" }) {
   return (
     <div className="d-slider">
       <div className="d-slider-head">
@@ -541,6 +544,7 @@ const TABS = [
   { id:"phase5",   icon:"◈",  label:"Insights" },
   { id:"results",  icon:"◉",  label:"Results"  },
   { id:"equity",   icon:"⊕",  label:"Equity"   },
+  { id:"surveillance", icon:"▦", label:"Surveillance" },
 ];
 
 export default function App() {
@@ -575,6 +579,7 @@ export default function App() {
   const [cfLoading,        setCfLoading]        = useState(false);
   const [resilienceScores, setResilienceScores] = useState(null);
   const [phase5Tab,        setPhase5Tab]        = useState("roi");
+  const [surveillanceValues, setSurveillanceValues] = useState({});
 
   // Init map — delay to allow flex layout to settle in production
   useEffect(() => {
@@ -629,13 +634,16 @@ export default function App() {
     if (!mapReady||!map.current.getSource("tracts")||!tracts) return;
     const updated = { ...tracts, features: tracts.features.map(f => {
       const g=f.properties.GEOID; let val=0;
-      if (!result||mapMode==="vuln")               val=f.properties.vuln_blended||0;
+      const isSurveillanceMode = mapMode==="hospital_capacity"||mapMode==="vaccination_coverage";
+      if (mapMode==="vuln"||(!result&&!isSurveillanceMode)) val=f.properties.vuln_blended||0;
       else if (mapMode==="peak_I")                 val=result.tract_metrics[g]?result.tract_metrics[g].peak_I/5000:0;
       else if (mapMode==="attack")                 val=result.tract_metrics[g]?result.tract_metrics[g].attack_rate:0;
       else if (mapMode==="delta"&&compareResult)   val=Math.min((compareResult.delta[g]||0)*5,1);
       else if (mapMode==="healthcare")             val=f.properties.hub_dist_norm||0;
       else if (mapMode==="equity"&&equityData)     { const eq=equityData.all_tracts?.find(r=>r.GEOID===g); val=eq?Math.min(eq.equity_burden*20,1):0; }
       else if (mapMode==="resilience"&&resilienceScores) val=resilienceScores[g]?resilienceScores[g].fragility:0;
+      else if (mapMode==="hospital_capacity")      val=surveillanceValues[g]?.value ?? 0;
+      else if (mapMode==="vaccination_coverage")   val=surveillanceValues[g]?.value!=null?1-surveillanceValues[g].value:0;
       else if (mapMode==="playback"&&result.snapshots) {
         const sds=Object.keys(result.snapshots).map(Number).sort((a,b)=>a-b);
         const nd=sds.reduce((p,c)=>Math.abs(c-playDay)<Math.abs(p-playDay)?c:p,sds[0]);
@@ -654,7 +662,7 @@ export default function App() {
       const ids=tracts.features.filter(f=>Number(f.properties.HubDist||0)>30000&&result.tract_metrics[f.properties.GEOID]?.peak_I/(Number(f.properties.population)||1)>0.1).map(f=>f.properties.GEOID);
       map.current.setFilter("surge-outline",ids.length>0?["in",["get","GEOID"],["literal",ids]]:["==",["get","GEOID"],""]);
     } else if (map.current.getLayer("surge-outline")) map.current.setFilter("surge-outline",["==",["get","GEOID"],""]);
-  }, [result,playDay,mapMode,mapReady,tracts,compareResult,showSurge,equityData,resilienceScores]);
+  }, [result,playDay,mapMode,mapReady,tracts,compareResult,showSurge,equityData,resilienceScores,surveillanceValues]);
 
   // Playback
   useEffect(() => {
@@ -840,6 +848,19 @@ export default function App() {
                     <button className="cs-view-btn" onClick={()=>setShowEquityModal(true)}>View full report →</button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab==="surveillance" && (
+              <div className="drawer-content">
+                <SurveillanceTab
+                  api={API}
+                  tracts={tracts}
+                  mapMode={mapMode}
+                  setMapMode={setMapMode}
+                  selectedTract={display}
+                  onValuesChange={setSurveillanceValues}
+                />
               </div>
             )}
           </div>
