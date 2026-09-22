@@ -758,8 +758,8 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div className="header-left">
-          <span className="header-tag">Sevengill Labs</span>
-          <h1 className="header-title">Mako Epidemic Intelligence (WA Beta)</h1>
+          <span className="header-tag">Sevengills</span>
+          <h1 className="header-title">Epidemic Intelligence (WA Beta)</h1>
         </div>
         <div className="header-center"><span className="header-status">{statusMsg}</span></div>
         <div className="header-right">
