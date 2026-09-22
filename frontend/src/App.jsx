@@ -886,7 +886,7 @@ export default function App() {
               </div>
             )}
 
-            {activeTab==="stream" && (
+            {activeTab==="surveillance" && (
               <div className="drawer-content">
                 <SurveillanceTab
                   api={API}
