@@ -8,7 +8,7 @@ import {
 import axios from "axios";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "./App.css";
-import SurveillanceTab from "./SurveillanceTab.jsx";
+import SurveillanceTab, { SURVEILLANCE_STREAM_IDS } from "./SurveillanceTab.jsx";
 
 mapboxgl.accessToken = "pk.eyJ1IjoiY2hyaXN0b3BoZXJwaGFtIiwiYSI6ImNtcXZlbTRqZzEyeXEydXExZzl0aWJiaHMifQ.o58ZrcJwSDHNwV98157itA";
 
@@ -54,8 +54,12 @@ const LEGEND_CONFIG = {
   playback:   { label: "Active Infections",    low: "0%",       high: "High",    colors: ["#0d1b2a","#1e3a5f","#1d6fa8","#f97316","#dc2626"] },
   equity:     { label: "Equity Burden",        low: "Low",      high: "High",    colors: ["#0d1b2a","#1e3a5f","#7c3aed","#dc2626"] },
   resilience: { label: "Structural Resilience",low: "Resilient",high: "Fragile", colors: ["#0d2a1a","#166534","#f97316","#dc2626"] },
-  hospital_capacity:    { label: "Hospital Capacity Strain", low: "Slack",       high: "Strained",        colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
-  vaccination_coverage: { label: "Vaccination Coverage",     low: "Well Covered",high: "Under-Vaccinated",colors: ["#0d2a1a","#166534","#f97316","#dc2626"] },
+  hospital_capacity:     { label: "Hospital Capacity Strain", low: "Slack",       high: "Strained",        colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
+  vaccination_coverage:  { label: "Vaccination Coverage",     low: "Well Covered",high: "Under-Vaccinated",colors: ["#0d2a1a","#166534","#f97316","#dc2626"] },
+  air_quality_pm25_mean: { label: "Air Quality — PM2.5 (avg)",low: "Clean",       high: "Polluted",         colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
+  air_quality_pm25_max:  { label: "Air Quality — PM2.5 (max)",low: "Clean",       high: "Polluted",         colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
+  wastewater_sars_cov2:  { label: "Wastewater (SARS-CoV-2)",  low: "Low",         high: "High",             colors: ["#0d1b2a","#1e3a5f","#7c3aed","#dc2626"] },
+  school_absenteeism:    { label: "School Absenteeism",       low: "Low",         high: "High",             colors: ["#0d1b2a","#1e3a5f","#f97316","#dc2626"] },
 };
 
 export const fmt  = n => n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -674,8 +678,15 @@ export default function App() {
       else if (mapMode==="healthcare")  val = f.properties.hub_dist_norm||0;
       else if (mapMode==="equity")      val = equityByGeoid ? Math.min((equityByGeoid.get(g)?.equity_burden||0)*20,1) : vuln;
       else if (mapMode==="resilience")  val = resilienceScores ? (resilienceScores[g]?.fragility||0) : vuln;
-      else if (mapMode==="hospital_capacity")    val = surveillanceValues[g]?.value ?? 0;
-      else if (mapMode==="vaccination_coverage") val = surveillanceValues[g]?.value!=null?1-surveillanceValues[g].value:0;
+      else if (SURVEILLANCE_STREAM_IDS.includes(mapMode)) {
+        // Values arrive already 0-1 (SurveillanceTab min-max normalizes
+        // native-unit streams before handing them up). Only vaccination
+        // coverage needs inverting — high coverage is good, so "high val
+        // = red = concerning" would be backwards otherwise; every other
+        // surveillance stream already has "higher = worse" semantics.
+        const raw = surveillanceValues[g]?.value;
+        val = mapMode==="vaccination_coverage" ? (raw!=null?1-raw:0) : (raw ?? 0);
+      }
       else if (mapMode==="playback"&&snapshotDays) {
         const nd=snapshotDays.reduce((p,c)=>Math.abs(c-playDay)<Math.abs(p-playDay)?c:p,snapshotDays[0]);
         val=Math.min(((result.snapshots[nd]||{})[g]||0)/(f.properties.population||1),1);
