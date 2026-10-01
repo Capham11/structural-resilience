@@ -1,8 +1,10 @@
-# Surveillance ingestion (Phase 6)
+# Surveillance ingestion + scoring (Phase 6)
 
 Ingests weekly tract-level surveillance streams into a single SQLite
-table (`data/surveillance.db`, table `tract_timeseries`). No anomaly
-detection or scoring here — just crosswalk + storage.
+table (`data/surveillance.db`, table `tract_timeseries`), then scores each
+(tract, stream) against its own history and corroborates anomalies across
+streams into tract-level alerts (`tract_stream_scores` and `tract_alerts` —
+see "Scoring + corroboration" below). Statistical only, no ML.
 
 ```
 tract_id | stream | week | value | confidence | interpolation_method
@@ -173,6 +175,46 @@ local-file adapter input (`data/raw/school_absenteeism.csv`:
 `school_id, week, absence_rate`) — so wiring in real data later is a data
 change, not a rebuild.
 
+## Scoring + corroboration
+
+Two more tables, built on top of `tract_timeseries`:
+
+- `tract_stream_scores` (`scoring.py`) — one row per (tract, stream, week)
+  that had a real observed value, scored against a robust median/MAD
+  baseline of that (tract, stream)'s own prior history (excluding
+  `carry_forward`/`demo` rows — those aren't real observations).
+  **Cold start**: needs `MIN_LOCAL_HISTORY_WEEKS` (8) real prior weeks for
+  its own baseline; below that, falls back to pooling every tract sharing
+  its 5-digit state+county GEOID prefix (`MIN_COUNTY_OBSERVATIONS`, 20),
+  then the full 2-digit state prefix. If none of the three have enough
+  history, **no row is written** — it sits out rather than scoring as
+  "normal." `baseline_source`/`fallback_baseline_used` record exactly which
+  tier (if any) actually produced a row. `z_score`/`p_value` are always
+  stored (not just a pass/fail flag) so a future false-discovery-rate
+  correction can be added by reading/updating this table directly, without
+  rescoring anything.
+- `tract_alerts` (`corroboration.py`) — a tract gets an alert for a week
+  only when `scoring_config.CORROBORATION_RULE` is satisfied: at least
+  `min_streams` (2) streams flagged anomalous in the *same direction*
+  (elevated or depressed), with at least `min_tract_resolved` (1) of them
+  genuinely tract-resolved per `scoring_config.STREAM_SCOPE` — not a
+  regional/county broadcast re-applied across many tracts (see
+  `STREAM_SCOPE`'s comments for how `search_trends`/`pharmacy_fills` slot
+  in once those streams exist). The rule is a config dict, not hardcoded
+  thresholds, since it'll likely need tuning once real data exists.
+  Streams not registered in `STREAM_SCOPE` default to `"broadcast"`
+  (fail-safe, not fail-open) — a stream only counts toward
+  `min_tract_resolved` once someone has explicitly classified it.
+
+Run after ingestion: `python3 run_scoring.py [week]` (omit week to score
+every week present in `tract_timeseries`).
+
+**Real data is currently zero rows for every stream** (confirmed before
+building this), so a live run against `data/surveillance.db` today will
+correctly score and alert on nothing — that's the cold-start design working
+as intended, not a bug. See `surveillance/tests/test_scoring.py` for
+synthetic-fixture verification of the actual logic.
+
 ## Gap handling
 
 Every live/local-file script calls `db.carry_forward_gaps` after writing
@@ -187,10 +229,12 @@ rows, i.e. real absence, not zero.
 
 ## Tests
 
-`pytest surveillance/tests/` — offline unit tests on synthetic fixtures
-covering every crosswalk (IDW, k-nearest IDW, population-weighted
-zip-tract, population-weighted dasymetric) and carry-forward (including
-that it never overwrites an observed row).
+`pytest surveillance/tests/` — offline unit tests on synthetic fixtures:
+`test_crosswalk_math.py` covers every crosswalk (IDW, k-nearest IDW,
+population-weighted zip-tract, population-weighted dasymetric) and
+carry-forward; `test_scoring.py` covers baseline/cold-start fallback and
+every corroboration rule case (including that two broadcast-only streams,
+or an unregistered stream, never alert alone).
 
 ## Verifying end to end
 
@@ -199,7 +243,9 @@ python3 ingest_hospital_capacity.py
 python3 ingest_vaccination_coverage.py
 AIRNOW_API_KEY=... python3 ingest_air_quality.py       # live pull, needs a free key
 python3 ingest_wastewater.py                            # live pull + local sewershed/population files
+python3 run_scoring.py                                  # score + corroborate every week just ingested
 sqlite3 ../data/surveillance.db "select stream, interpolation_method, count(*) from tract_timeseries group by 1,2;"
+sqlite3 ../data/surveillance.db "select * from tract_alerts;"
 ```
 
 `ingest_school_absenteeism.py` has no real input to verify against — see

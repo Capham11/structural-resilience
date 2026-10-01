@@ -1,18 +1,24 @@
 """
-Surveillance — Unified Tract-Level Time Series Store
+Surveillance — Unified Tract-Level Time Series Store + Scoring Tables
 
-Shared SQLite table for all surveillance streams (hospital capacity,
-vaccination coverage, and any future stream). No anomaly detection or
-scoring here — just schema + upsert + gap carry-forward.
+Three SQLite tables:
+  - tract_timeseries     raw/crosswalked observations (all ingest_*.py scripts)
+  - tract_stream_scores  per-(tract,stream,week) baseline + z-score (scoring.py)
+  - tract_alerts         corroborated multi-stream alerts (corroboration.py)
 
-Schema:
+tract_timeseries schema:
     tract_id              TEXT  — 11-digit zero-padded GEOID
     stream                TEXT  — e.g. 'hospital_capacity', 'vaccination_coverage'
     week                  TEXT  — ISO date, week-ending Sunday, 'YYYY-MM-DD'
     value                 REAL
     confidence            REAL  — 0-1
     interpolation_method  TEXT  — 'distance_weighted_idw' | 'population_weighted_zip_tract'
-                                   | 'carry_forward'
+                                   | 'population_weighted_dasymetric' | 'carry_forward'
+                                   | 'regional_broadcast' | 'county_broadcast' (future
+                                   search_trends/pharmacy_fills streams)
+
+tract_stream_scores / tract_alerts schemas: see SCHEMA_SQL below and
+surveillance/scoring.py / corroboration.py docstrings.
 """
 
 import sqlite3
@@ -30,6 +36,19 @@ DB_PATH = REPO_ROOT / "data" / "surveillance.db"
 TABLE = "tract_timeseries"
 COLUMNS = ["tract_id", "stream", "week", "value", "confidence", "interpolation_method"]
 
+SCORES_TABLE = "tract_stream_scores"
+SCORES_COLUMNS = [
+    "tract_id", "stream", "week", "value", "confidence", "baseline_median", "baseline_mad",
+    "z_score", "p_value", "direction", "is_anomalous", "baseline_source",
+    "fallback_baseline_used", "n_history_weeks",
+]
+
+ALERTS_TABLE = "tract_alerts"
+ALERTS_COLUMNS = [
+    "tract_id", "week", "corroborating_streams", "composite_score",
+    "confidence", "fallback_baseline_used", "direction",
+]
+
 # Confidence multiplier applied per week a value is carried forward, so
 # staleness degrades visibly rather than silently repeating full-confidence
 # numbers forever.
@@ -44,6 +63,35 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
     confidence            REAL,
     interpolation_method  TEXT,
     PRIMARY KEY (tract_id, stream, week)
+);
+
+CREATE TABLE IF NOT EXISTS {SCORES_TABLE} (
+    tract_id               TEXT NOT NULL,
+    stream                 TEXT NOT NULL,
+    week                   TEXT NOT NULL,
+    value                  REAL,
+    confidence             REAL,
+    baseline_median        REAL,
+    baseline_mad           REAL,
+    z_score                REAL,
+    p_value                REAL,
+    direction              TEXT,
+    is_anomalous           INTEGER,
+    baseline_source        TEXT,
+    fallback_baseline_used INTEGER,
+    n_history_weeks        INTEGER,
+    PRIMARY KEY (tract_id, stream, week)
+);
+
+CREATE TABLE IF NOT EXISTS {ALERTS_TABLE} (
+    tract_id               TEXT NOT NULL,
+    week                   TEXT NOT NULL,
+    corroborating_streams  TEXT NOT NULL,
+    composite_score        REAL,
+    confidence             REAL,
+    fallback_baseline_used INTEGER,
+    direction              TEXT,
+    PRIMARY KEY (tract_id, week)
 );
 """
 
@@ -60,7 +108,7 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
-    conn.execute(SCHEMA_SQL)
+    conn.executescript(SCHEMA_SQL)
     conn.commit()
 
 
@@ -68,20 +116,25 @@ def init_db(conn: sqlite3.Connection) -> None:
 # UPSERT
 # ==================================================
 
-def upsert_rows(conn: sqlite3.Connection, df: pd.DataFrame) -> int:
+def upsert_rows(conn: sqlite3.Connection, df: pd.DataFrame, table: str = TABLE,
+                 columns: list = None) -> int:
     """
-    Insert or replace rows in tract_timeseries. `df` must contain exactly
-    COLUMNS (extra columns are ignored). Returns the number of rows written.
+    Insert or replace rows in `table` (default tract_timeseries). `df` must
+    contain at least `columns` (default COLUMNS) — extra columns are
+    ignored. Shared by every ingest_*.py script as well as scoring.py /
+    corroboration.py, which pass table=SCORES_TABLE / ALERTS_TABLE.
+    Returns the number of rows written.
     """
-    missing = set(COLUMNS) - set(df.columns)
+    columns = columns if columns is not None else COLUMNS
+    missing = set(columns) - set(df.columns)
     if missing:
         raise ValueError(f"upsert_rows: missing required columns {missing}")
 
-    rows = df[COLUMNS].itertuples(index=False, name=None)
+    rows = df[columns].itertuples(index=False, name=None)
     conn.executemany(
         f"""
-        INSERT OR REPLACE INTO {TABLE} ({", ".join(COLUMNS)})
-        VALUES ({", ".join(["?"] * len(COLUMNS))})
+        INSERT OR REPLACE INTO {table} ({", ".join(columns)})
+        VALUES ({", ".join(["?"] * len(columns))})
         """,
         rows,
     )

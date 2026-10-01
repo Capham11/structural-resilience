@@ -129,11 +129,12 @@ function MapPills({ mapMode, setMapMode, result, playing, setPlaying, playDay, s
   );
 }
 
-function TractCard({ tract, result, resilienceScores, onClose }) {
+function TractCard({ tract, result, resilienceScores, alertTracts, onClose }) {
   if (!tract) return null;
   const metrics = result?.tract_metrics?.[tract.GEOID];
   const res     = resilienceScores?.[tract.GEOID];
   const isSurge = Number(tract.HubDist||0)>30000 && metrics?.peak_I/(Number(tract.population)||1)>0.1;
+  const alert   = alertTracts?.[tract.GEOID];
   return (
     <div className="tract-card">
       <div className="tc-head">
@@ -154,6 +155,11 @@ function TractCard({ tract, result, resilienceScores, onClose }) {
         {res && <div className="tc-row"><span>Resilience</span><span className={`tc-res ${res.tier}`}>{res.score.toFixed(3)} — {res.tier}</span></div>}
       </div>
       {isSurge && <div className="tc-surge">⚠ Surge Risk — {(Number(tract.HubDist)/1000).toFixed(0)} km from hospital</div>}
+      {alert && (
+        <div className="tc-alert">
+          ⚠ Active Alert — {alert.direction} ({alert.corroborating_streams.join(", ")})
+        </div>
+      )}
     </div>
   );
 }
@@ -601,6 +607,7 @@ export default function App() {
   const [resilienceScores, setResilienceScores] = useState(null);
   const [phase5Tab,        setPhase5Tab]        = useState("roi");
   const [surveillanceValues, setSurveillanceValues] = useState({});
+  const [alertTracts,      setAlertTracts]       = useState({});
 
   // Init map — delay to allow flex layout to settle in production
   useEffect(() => {
@@ -642,12 +649,26 @@ export default function App() {
         "fill-opacity":0.75}});
       map.current.addLayer({id:"tracts-line",type:"line",source:"tracts",paint:{"line-color":"#fff","line-width":0.2,"line-opacity":0.2}});
       map.current.addLayer({id:"surge-outline",type:"line",source:"tracts",paint:{"line-color":"#ef4444","line-width":2.5,"line-opacity":0.9},filter:["==",["get","GEOID"],""]});
+      map.current.addLayer({id:"alert-outline",type:"line",source:"tracts",paint:{"line-color":"#fbbf24","line-width":3,"line-opacity":0.95,"line-dasharray":[2,1]},filter:["==",["get","GEOID"],""]});
       map.current.addLayer({id:"sel-outline",type:"line",source:"tracts",paint:{"line-color":"#fff","line-width":2,"line-opacity":1},filter:["==",["get","GEOID"],""]});
       map.current.on("mousemove","tracts-fill",e=>{if(e.features.length){setHoveredTract(e.features[0].properties);map.current.getCanvas().style.cursor="pointer";}});
       map.current.on("mouseleave","tracts-fill",()=>{setHoveredTract(null);map.current.getCanvas().style.cursor="";});
       map.current.on("click","tracts-fill",e=>{if(e.features.length){const p=e.features[0].properties;setSelectedTract(p);map.current.setFilter("sel-outline",["==",["get","GEOID"],p.GEOID]);}});
       setStatusMsg("Tracts loaded");
     }).catch(()=>setStatusMsg("⚠ API unreachable"));
+  }, [mapReady]);
+
+  // Load current anomaly/corroboration alerts once tracts are up — always
+  // shown (no opt-in checkbox, unlike surge zones), same fetch-once pattern
+  // as the initial /tracts load above.
+  useEffect(() => {
+    if (!mapReady) return;
+    axios.get(`${API}/surveillance/alerts`).then(res => {
+      if (!res.data.available) return;
+      const byGeoid = {};
+      res.data.alerts.forEach(a => { byGeoid[a.tract_id] = a; });
+      setAlertTracts(byGeoid);
+    }).catch(() => {});
   }, [mapReady]);
 
   // Update map colors — drives fill-color off feature-state (set per frame
@@ -705,7 +726,12 @@ export default function App() {
       const ids=tracts.features.filter(f=>Number(f.properties.HubDist||0)>30000&&result.tract_metrics[f.properties.GEOID]?.peak_I/(Number(f.properties.population)||1)>0.1).map(f=>f.properties.GEOID);
       map.current.setFilter("surge-outline",ids.length>0?["in",["get","GEOID"],["literal",ids]]:["==",["get","GEOID"],""]);
     } else if (map.current.getLayer("surge-outline")) map.current.setFilter("surge-outline",["==",["get","GEOID"],""]);
-  }, [result,playDay,mapMode,mapReady,tracts,compareResult,showSurge,equityData,resilienceScores,surveillanceValues]);
+
+    if (map.current.getLayer("alert-outline")) {
+      const alertIds = Object.keys(alertTracts);
+      map.current.setFilter("alert-outline", alertIds.length>0?["in",["get","GEOID"],["literal",alertIds]]:["==",["get","GEOID"],""]);
+    }
+  }, [result,playDay,mapMode,mapReady,tracts,compareResult,showSurge,equityData,resilienceScores,surveillanceValues,alertTracts]);
 
   // Playback
   useEffect(() => {
@@ -917,7 +943,7 @@ export default function App() {
             playing={playing} setPlaying={setPlaying} playDay={playDay}
             setPlayDay={setPlayDay} days={params.days} compareResult={compareResult} />
           {display && (
-            <TractCard tract={display} result={result} resilienceScores={resilienceScores}
+            <TractCard tract={display} result={result} resilienceScores={resilienceScores} alertTracts={alertTracts}
               onClose={selectedTract?()=>{setSelectedTract(null);map.current?.setFilter("sel-outline",["==",["get","GEOID"],""]);}:null} />
           )}
           <BottomDrawer result={result} compareResult={compareResult} params={params} open={drawerOpen} onToggle={()=>setDrawerOpen(o=>!o)} />

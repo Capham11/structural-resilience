@@ -467,7 +467,7 @@ def counterfactual(req: SimulationRequest):
 
 
 # ==================================================
-# SURVEILLANCE (Phase 6) — hospital capacity + vaccination coverage
+# SURVEILLANCE (Phase 6) — stream values + anomaly/corroboration alerts
 # ==================================================
 
 def get_surveillance_conn():
@@ -545,6 +545,81 @@ def surveillance_timeseries(tract_id: str, stream: str):
         return {"tract_id": tract_id, "stream": stream, "available": len(series) > 0, "series": series}
     except sqlite3.OperationalError:
         return {"tract_id": tract_id, "stream": stream, "available": False, "series": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/surveillance/alerts")
+def surveillance_alerts(week: Optional[str] = None):
+    """
+    Current alerts (tract_alerts). Defaults to the most recent week present
+    in the table; pass ?week= for a specific one. available:false (not an
+    error) if the scoring pipeline hasn't been run yet.
+    """
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"week": week, "available": False, "alerts": []}
+    try:
+        if week is None:
+            row = conn.execute("SELECT MAX(week) FROM tract_alerts").fetchone()
+            week = row[0] if row else None
+        if week is None:
+            return {"week": None, "available": False, "alerts": []}
+
+        rows = conn.execute(
+            "SELECT tract_id, corroborating_streams, composite_score, confidence, "
+            "fallback_baseline_used, direction FROM tract_alerts WHERE week = ?",
+            (week,),
+        ).fetchall()
+        alerts = [
+            {
+                "tract_id": tract_id,
+                "corroborating_streams": json.loads(streams),
+                "composite_score": score,
+                "confidence": confidence,
+                "fallback_baseline_used": bool(fallback),
+                "direction": direction,
+            }
+            for tract_id, streams, score, confidence, fallback, direction in rows
+        ]
+        return {"week": week, "available": len(alerts) > 0, "alerts": alerts}
+    except sqlite3.OperationalError:
+        return {"week": week, "available": False, "alerts": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/surveillance/tract/{tract_id}/alerts")
+def surveillance_tract_alerts(tract_id: str):
+    """Full alert history for one tract, oldest first."""
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"tract_id": tract_id, "available": False, "alerts": []}
+    try:
+        rows = conn.execute(
+            "SELECT week, corroborating_streams, composite_score, confidence, "
+            "fallback_baseline_used, direction FROM tract_alerts "
+            "WHERE tract_id = ? ORDER BY week",
+            (tract_id,),
+        ).fetchall()
+        alerts = [
+            {
+                "week": week,
+                "corroborating_streams": json.loads(streams),
+                "composite_score": score,
+                "confidence": confidence,
+                "fallback_baseline_used": bool(fallback),
+                "direction": direction,
+            }
+            for week, streams, score, confidence, fallback, direction in rows
+        ]
+        return {"tract_id": tract_id, "available": len(alerts) > 0, "alerts": alerts}
+    except sqlite3.OperationalError:
+        return {"tract_id": tract_id, "available": False, "alerts": []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

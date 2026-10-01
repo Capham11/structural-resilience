@@ -331,6 +331,7 @@ body { background: var(--bg); color: var(--t1); font-family: var(--f); font-size
 .tc-row span:first-child { color: var(--tm); }
 .tc-row span:last-child  { font-family: var(--fm); color: var(--t2); font-weight: 600; font-size: 10px; }
 .tc-surge  { margin-top: 7px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); border-radius: 5px; padding: 4px 7px; font-size: 9.5px; color: #fca5a5; font-weight: 600; }
+.tc-alert  { margin-top: 7px; background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.35); border-radius: 5px; padding: 4px 7px; font-size: 9.5px; color: #fcd34d; font-weight: 600; }
 
 /* Bottom Drawer */
 .bottom-drawer {
