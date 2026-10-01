@@ -565,7 +565,7 @@ const TABS = [
   { id:"phase5",   icon:"◈",  label:"Insights" },
   { id:"results",  icon:"◉",  label:"Results"  },
   { id:"equity",   icon:"⊕",  label:"Equity"   },
-  { id:"surveillance", icon:"▦", label:"Surveillance" },
+  { id:"surveillance", icon:"▦", label:"Stream" },
 ];
 
 export default function App() {
