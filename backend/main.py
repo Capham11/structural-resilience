@@ -6,6 +6,7 @@ Spatial SEIR Model — Washington State
 from pathlib import Path
 from typing import Optional
 import json
+import sqlite3
 
 import numpy as np
 import pandas as pd
@@ -23,6 +24,26 @@ from libpysal.weights import Queen
 
 BASE_DIR  = Path(__file__).parent
 DATA_PATH = BASE_DIR / "washington_vulnerability_enriched.geojson"
+
+# Surveillance streams (Phase 6) live in a separate SQLite table, written by
+# surveillance/ingest_hospital_capacity.py and ingest_vaccination_coverage.py.
+# Check for a co-located copy first (same convention as DATA_PATH above),
+# then fall back to the repo-root data/ layout used in local dev.
+SURVEILLANCE_DB_CANDIDATES = [
+    BASE_DIR / "surveillance.db",
+    BASE_DIR.parent / "data" / "surveillance.db",
+]
+
+# Hospital-distance data (GEOID, HubName, HubDist) — computed once via a
+# manual QGIS "distance to nearest hub" join and never actually carried
+# through phase2_vulnerability_pull.py's export, so it never made it into
+# washington_vulnerability_enriched.geojson. hub_distance.csv is a small
+# (GEOID, HubName, HubDist) extract of that join, checked in alongside this
+# file; the outbreak_model path is a local-dev fallback.
+HUB_DISTANCE_CANDIDATES = [
+    BASE_DIR / "hub_distance.csv",
+    BASE_DIR.parent / "outbreak_model" / "data" / "washington_base_structural_resilience.geojson",
+]
 
 # ==================================================
 # APP INIT
@@ -52,6 +73,47 @@ tracts["population"] = pd.to_numeric(tracts["population"], errors="coerce")
 tracts = tracts.dropna(subset=["population"])
 tracts = tracts[tracts["population"] > 0].copy()
 tracts = tracts.reset_index(drop=True)
+
+# ---- Merge in hospital-distance data (see HUB_DISTANCE_CANDIDATES above) ----
+tracts["GEOID"] = tracts["GEOID"].astype(str).str.zfill(11)
+
+hub_df = None
+for _p in HUB_DISTANCE_CANDIDATES:
+    if not _p.exists():
+        continue
+    if _p.suffix == ".csv":
+        hub_df = pd.read_csv(_p, dtype={"GEOID": str})
+    else:
+        hub_df = gpd.read_file(_p)[["GEOID", "HubName", "HubDist"]]
+    hub_df["GEOID"] = hub_df["GEOID"].astype(str).str.zfill(11)
+    hub_df = hub_df.drop_duplicates(subset="GEOID")
+    break
+
+if hub_df is not None:
+    tracts = tracts.merge(hub_df, on="GEOID", how="left").reset_index(drop=True)
+    tracts["HubDist"] = pd.to_numeric(tracts["HubDist"], errors="coerce")
+
+    hub_min, hub_max = tracts["HubDist"].min(), tracts["HubDist"].max()
+    if pd.notna(hub_min) and pd.notna(hub_max) and hub_max > hub_min:
+        tracts["hub_dist_norm"] = (tracts["HubDist"] - hub_min) / (hub_max - hub_min)
+    else:
+        tracts["hub_dist_norm"] = 0.0
+    tracts["hub_dist_norm"] = tracts["hub_dist_norm"].fillna(0.0)
+
+    # Structural surge-risk proxy: equal blend of hospital distance and
+    # baseline vulnerability (no formula for this existed anywhere in the
+    # pipeline before — this is a simple, documented composite, not a
+    # restored original computation).
+    vuln_for_surge = tracts["vuln_blended"].fillna(0) if "vuln_blended" in tracts.columns else 0
+    tracts["surge_risk"] = 0.5 * tracts["hub_dist_norm"] + 0.5 * vuln_for_surge
+
+    matched = tracts["HubDist"].notna().sum()
+    print(f"  Merged hospital-distance data — {matched}/{len(tracts)} tracts matched")
+else:
+    print("  ⚠ No hospital-distance data found (checked: "
+          f"{', '.join(str(p) for p in HUB_DISTANCE_CANDIDATES)}) — "
+          "HubDist/hub_dist_norm/surge_risk will be unavailable; surge markers "
+          "and the Hospital map layer will show no data.")
 
 N   = len(tracts)
 pop = tracts["population"].to_numpy(dtype=np.float64)
@@ -402,3 +464,267 @@ def counterfactual(req: SimulationRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================================================
+# SURVEILLANCE (Phase 6) — stream values + anomaly/corroboration alerts
+# ==================================================
+
+def get_surveillance_conn():
+    """Read-only connection to the surveillance DB, or None if not present yet."""
+    for p in SURVEILLANCE_DB_CANDIDATES:
+        if p.exists():
+            return sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    return None
+
+
+@app.get("/surveillance/weeks")
+def surveillance_weeks(stream: str):
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"stream": stream, "available": False, "weeks": []}
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT week FROM tract_timeseries WHERE stream = ? ORDER BY week",
+            (stream,),
+        ).fetchall()
+        weeks = [r[0] for r in rows]
+        return {"stream": stream, "available": len(weeks) > 0, "weeks": weeks}
+    except sqlite3.OperationalError:
+        # table doesn't exist yet
+        return {"stream": stream, "available": False, "weeks": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/surveillance/tracts")
+def surveillance_tracts(stream: str, week: str):
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"stream": stream, "week": week, "available": False, "tracts": {}}
+    try:
+        rows = conn.execute(
+            "SELECT tract_id, value, confidence, interpolation_method "
+            "FROM tract_timeseries WHERE stream = ? AND week = ?",
+            (stream, week),
+        ).fetchall()
+        tracts_out = {
+            tract_id: {
+                "value": value,
+                "confidence": confidence,
+                "interpolation_method": method,
+            }
+            for tract_id, value, confidence, method in rows
+        }
+        return {"stream": stream, "week": week, "available": len(tracts_out) > 0, "tracts": tracts_out}
+    except sqlite3.OperationalError:
+        return {"stream": stream, "week": week, "available": False, "tracts": {}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/surveillance/timeseries")
+def surveillance_timeseries(tract_id: str, stream: str):
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"tract_id": tract_id, "stream": stream, "available": False, "series": []}
+    try:
+        rows = conn.execute(
+            "SELECT week, value, confidence, interpolation_method "
+            "FROM tract_timeseries WHERE stream = ? AND tract_id = ? ORDER BY week",
+            (stream, tract_id),
+        ).fetchall()
+        series = [
+            {"week": week, "value": value, "confidence": confidence, "interpolation_method": method}
+            for week, value, confidence, method in rows
+        ]
+        return {"tract_id": tract_id, "stream": stream, "available": len(series) > 0, "series": series}
+    except sqlite3.OperationalError:
+        return {"tract_id": tract_id, "stream": stream, "available": False, "series": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/surveillance/alerts")
+def surveillance_alerts(week: Optional[str] = None):
+    """
+    Current alerts (tract_alerts). Defaults to the most recent week present
+    in the table; pass ?week= for a specific one. available:false (not an
+    error) if the scoring pipeline hasn't been run yet.
+    """
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"week": week, "available": False, "alerts": []}
+    try:
+        if week is None:
+            row = conn.execute("SELECT MAX(week) FROM tract_alerts").fetchone()
+            week = row[0] if row else None
+        if week is None:
+            return {"week": None, "available": False, "alerts": []}
+
+        rows = conn.execute(
+            "SELECT tract_id, corroborating_streams, composite_score, confidence, "
+            "fallback_baseline_used, direction FROM tract_alerts WHERE week = ?",
+            (week,),
+        ).fetchall()
+        alerts = [
+            {
+                "tract_id": tract_id,
+                "corroborating_streams": json.loads(streams),
+                "composite_score": score,
+                "confidence": confidence,
+                "fallback_baseline_used": bool(fallback),
+                "direction": direction,
+            }
+            for tract_id, streams, score, confidence, fallback, direction in rows
+        ]
+        return {"week": week, "available": len(alerts) > 0, "alerts": alerts}
+    except sqlite3.OperationalError:
+        return {"week": week, "available": False, "alerts": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/surveillance/tract/{tract_id}/alerts")
+def surveillance_tract_alerts(tract_id: str):
+    """Full alert history for one tract, oldest first."""
+    conn = get_surveillance_conn()
+    if conn is None:
+        return {"tract_id": tract_id, "available": False, "alerts": []}
+    try:
+        rows = conn.execute(
+            "SELECT week, corroborating_streams, composite_score, confidence, "
+            "fallback_baseline_used, direction FROM tract_alerts "
+            "WHERE tract_id = ? ORDER BY week",
+            (tract_id,),
+        ).fetchall()
+        alerts = [
+            {
+                "week": week,
+                "corroborating_streams": json.loads(streams),
+                "composite_score": score,
+                "confidence": confidence,
+                "fallback_baseline_used": bool(fallback),
+                "direction": direction,
+            }
+            for week, streams, score, confidence, fallback, direction in rows
+        ]
+        return {"tract_id": tract_id, "available": len(alerts) > 0, "alerts": alerts}
+    except sqlite3.OperationalError:
+        return {"tract_id": tract_id, "available": False, "alerts": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+SUMMARY_WEEKS = 8  # trend window for /surveillance/summary
+
+
+@app.get("/surveillance/summary")
+def surveillance_summary():
+    """
+    One-call statewide overview for the Overview tab: per-stream recent
+    activity (coverage, mean value, staleness, a short trend) plus the
+    anomaly-alert picture (active count, a trend, the most recent alerts).
+    No existing /surveillance/* endpoint aggregates across tracts AND
+    recent weeks at once, so this is a dedicated read/aggregate query —
+    no new tables.
+    """
+    conn = get_surveillance_conn()
+    empty = {"available": False, "latest_week": None, "streams": [], "alerts": None}
+    if conn is None:
+        return empty
+    try:
+        latest_week = conn.execute("SELECT MAX(week) FROM tract_timeseries").fetchone()[0]
+        if latest_week is None:
+            return empty
+
+        streams = [r[0] for r in conn.execute("SELECT DISTINCT stream FROM tract_timeseries").fetchall()]
+
+        stream_summaries = []
+        for stream in streams:
+            s_latest = conn.execute(
+                "SELECT MAX(week) FROM tract_timeseries WHERE stream = ?", (stream,)
+            ).fetchone()[0]
+            if s_latest is None:
+                continue
+
+            weeks_available = conn.execute(
+                "SELECT COUNT(DISTINCT week) FROM tract_timeseries WHERE stream = ?", (stream,)
+            ).fetchone()[0]
+
+            latest_rows = conn.execute(
+                "SELECT value, interpolation_method FROM tract_timeseries WHERE stream = ? AND week = ?",
+                (stream, s_latest),
+            ).fetchall()
+            tracts_reporting = len(latest_rows)
+            values = [v for v, _ in latest_rows if v is not None]
+            mean_value = sum(values) / len(values) if values else None
+            carry_count = sum(1 for _, m in latest_rows if m == "carry_forward")
+            pct_carry_forward = carry_count / tracts_reporting if tracts_reporting else None
+
+            trend_rows = conn.execute(
+                "SELECT week, AVG(value) FROM tract_timeseries "
+                "WHERE stream = ? AND value IS NOT NULL GROUP BY week ORDER BY week DESC LIMIT ?",
+                (stream, SUMMARY_WEEKS),
+            ).fetchall()
+
+            stream_summaries.append({
+                "stream": stream,
+                "latest_week": s_latest,
+                "weeks_available": weeks_available,
+                "tracts_reporting_latest": tracts_reporting,
+                "mean_value_latest": round(mean_value, 4) if mean_value is not None else None,
+                "pct_carry_forward_latest": round(pct_carry_forward, 4) if pct_carry_forward is not None else None,
+                "trend": [{"week": w, "mean_value": round(v, 4) if v is not None else None}
+                          for w, v in reversed(trend_rows)],
+            })
+
+        alerts_latest = conn.execute("SELECT MAX(week) FROM tract_alerts").fetchone()[0]
+        active_count_latest = 0
+        if alerts_latest:
+            active_count_latest = conn.execute(
+                "SELECT COUNT(*) FROM tract_alerts WHERE week = ?", (alerts_latest,)
+            ).fetchone()[0]
+
+        alert_trend_rows = conn.execute(
+            "SELECT week, COUNT(*) FROM tract_alerts GROUP BY week ORDER BY week DESC LIMIT ?",
+            (SUMMARY_WEEKS,),
+        ).fetchall()
+
+        recent_rows = conn.execute(
+            "SELECT tract_id, week, direction, composite_score, corroborating_streams "
+            "FROM tract_alerts ORDER BY week DESC, composite_score DESC LIMIT 20"
+        ).fetchall()
+
+        return {
+            "available": True,
+            "latest_week": latest_week,
+            "streams": stream_summaries,
+            "alerts": {
+                "active_count_latest": active_count_latest,
+                "trend": [{"week": w, "count": c} for w, c in reversed(alert_trend_rows)],
+                "recent": [
+                    {
+                        "tract_id": tract_id, "week": week, "direction": direction,
+                        "composite_score": score, "corroborating_streams": json.loads(streams_json),
+                    }
+                    for tract_id, week, direction, score, streams_json in recent_rows
+                ],
+            },
+        }
+    except sqlite3.OperationalError:
+        return empty
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
