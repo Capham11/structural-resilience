@@ -624,3 +624,107 @@ def surveillance_tract_alerts(tract_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+
+SUMMARY_WEEKS = 8  # trend window for /surveillance/summary
+
+
+@app.get("/surveillance/summary")
+def surveillance_summary():
+    """
+    One-call statewide overview for the Overview tab: per-stream recent
+    activity (coverage, mean value, staleness, a short trend) plus the
+    anomaly-alert picture (active count, a trend, the most recent alerts).
+    No existing /surveillance/* endpoint aggregates across tracts AND
+    recent weeks at once, so this is a dedicated read/aggregate query —
+    no new tables.
+    """
+    conn = get_surveillance_conn()
+    empty = {"available": False, "latest_week": None, "streams": [], "alerts": None}
+    if conn is None:
+        return empty
+    try:
+        latest_week = conn.execute("SELECT MAX(week) FROM tract_timeseries").fetchone()[0]
+        if latest_week is None:
+            return empty
+
+        streams = [r[0] for r in conn.execute("SELECT DISTINCT stream FROM tract_timeseries").fetchall()]
+
+        stream_summaries = []
+        for stream in streams:
+            s_latest = conn.execute(
+                "SELECT MAX(week) FROM tract_timeseries WHERE stream = ?", (stream,)
+            ).fetchone()[0]
+            if s_latest is None:
+                continue
+
+            weeks_available = conn.execute(
+                "SELECT COUNT(DISTINCT week) FROM tract_timeseries WHERE stream = ?", (stream,)
+            ).fetchone()[0]
+
+            latest_rows = conn.execute(
+                "SELECT value, interpolation_method FROM tract_timeseries WHERE stream = ? AND week = ?",
+                (stream, s_latest),
+            ).fetchall()
+            tracts_reporting = len(latest_rows)
+            values = [v for v, _ in latest_rows if v is not None]
+            mean_value = sum(values) / len(values) if values else None
+            carry_count = sum(1 for _, m in latest_rows if m == "carry_forward")
+            pct_carry_forward = carry_count / tracts_reporting if tracts_reporting else None
+
+            trend_rows = conn.execute(
+                "SELECT week, AVG(value) FROM tract_timeseries "
+                "WHERE stream = ? AND value IS NOT NULL GROUP BY week ORDER BY week DESC LIMIT ?",
+                (stream, SUMMARY_WEEKS),
+            ).fetchall()
+
+            stream_summaries.append({
+                "stream": stream,
+                "latest_week": s_latest,
+                "weeks_available": weeks_available,
+                "tracts_reporting_latest": tracts_reporting,
+                "mean_value_latest": round(mean_value, 4) if mean_value is not None else None,
+                "pct_carry_forward_latest": round(pct_carry_forward, 4) if pct_carry_forward is not None else None,
+                "trend": [{"week": w, "mean_value": round(v, 4) if v is not None else None}
+                          for w, v in reversed(trend_rows)],
+            })
+
+        alerts_latest = conn.execute("SELECT MAX(week) FROM tract_alerts").fetchone()[0]
+        active_count_latest = 0
+        if alerts_latest:
+            active_count_latest = conn.execute(
+                "SELECT COUNT(*) FROM tract_alerts WHERE week = ?", (alerts_latest,)
+            ).fetchone()[0]
+
+        alert_trend_rows = conn.execute(
+            "SELECT week, COUNT(*) FROM tract_alerts GROUP BY week ORDER BY week DESC LIMIT ?",
+            (SUMMARY_WEEKS,),
+        ).fetchall()
+
+        recent_rows = conn.execute(
+            "SELECT tract_id, week, direction, composite_score, corroborating_streams "
+            "FROM tract_alerts ORDER BY week DESC, composite_score DESC LIMIT 20"
+        ).fetchall()
+
+        return {
+            "available": True,
+            "latest_week": latest_week,
+            "streams": stream_summaries,
+            "alerts": {
+                "active_count_latest": active_count_latest,
+                "trend": [{"week": w, "count": c} for w, c in reversed(alert_trend_rows)],
+                "recent": [
+                    {
+                        "tract_id": tract_id, "week": week, "direction": direction,
+                        "composite_score": score, "corroborating_streams": json.loads(streams_json),
+                    }
+                    for tract_id, week, direction, score, streams_json in recent_rows
+                ],
+            },
+        }
+    except sqlite3.OperationalError:
+        return empty
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()

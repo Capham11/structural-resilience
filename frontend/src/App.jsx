@@ -9,6 +9,7 @@ import axios from "axios";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "./App.css";
 import SurveillanceTab, { SURVEILLANCE_STREAM_IDS } from "./SurveillanceTab.jsx";
+import OverviewTab from "./OverviewTab.jsx";
 
 mapboxgl.accessToken = "pk.eyJ1IjoiY2hyaXN0b3BoZXJwaGFtIiwiYSI6ImNtcXZlbTRqZzEyeXEydXExZzl0aWJiaHMifQ.o58ZrcJwSDHNwV98157itA";
 
@@ -572,6 +573,7 @@ const TABS = [
   { id:"results",  icon:"◉",  label:"Results"  },
   { id:"equity",   icon:"⊕",  label:"Equity"   },
   { id:"surveillance", icon:"▦", label:"Stream" },
+  { id:"overview", icon:"◫", label:"Overview" },
 ];
 
 export default function App() {
@@ -933,6 +935,12 @@ export default function App() {
                   selectedTract={display}
                   onValuesChange={setSurveillanceValues}
                 />
+              </div>
+            )}
+
+            {activeTab==="overview" && (
+              <div className="drawer-content">
+                <OverviewTab api={API} />
               </div>
             )}
           </div>

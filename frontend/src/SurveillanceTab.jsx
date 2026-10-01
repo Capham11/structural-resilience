@@ -90,7 +90,7 @@ function normalizeForMap(tractValues, kind) {
   return out;
 }
 
-function formatStreamValue(kind, unit, value) {
+export function formatStreamValue(kind, unit, value) {
   if (value == null) return "—";
   return kind === "fraction" ? pct(value) : `${fmt(value)}${unit ? " " + unit : ""}`;
 }
